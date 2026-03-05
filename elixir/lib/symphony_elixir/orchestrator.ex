@@ -10,9 +10,6 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.{AgentRunner, Config, Notifier, StatusDashboard, Tracker}
   alias SymphonyElixir.Linear.Issue
 
-  @continuation_retry_delay_ms 1_000
-  @failure_retry_base_ms 10_000
-  @gate_notification_states MapSet.new(["Review Complete", "Prepare Complete"])
   # Slightly above the dashboard render interval so "checking now…" can render.
   @poll_transition_render_delay_ms 20
   @empty_codex_totals %{
@@ -326,11 +323,16 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp notify_gate_state_transition(%Issue{} = issue) do
     if gate_state_for_notification?(issue.state) do
-      Notifier.notify(issue.identifier, issue.state)
+      Notifier.notify(issue)
     end
   end
 
-  defp gate_state_for_notification?(state) when is_binary(state), do: MapSet.member?(@gate_notification_states, state)
+  defp gate_state_for_notification?(state) when is_binary(state) do
+    Config.notification_gate_states()
+    |> MapSet.new()
+    |> MapSet.member?(state)
+  end
+
   defp gate_state_for_notification?(_state), do: false
 
   defp refresh_running_issue_state(%State{} = state, %Issue{} = issue) do
@@ -834,7 +836,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp retry_delay(attempt, metadata) when is_integer(attempt) and attempt > 0 and is_map(metadata) do
     if metadata[:delay_type] == :continuation and attempt == 1 do
-      @continuation_retry_delay_ms
+      Config.agent_continuation_delay_ms()
     else
       failure_retry_delay(attempt)
     end
@@ -842,7 +844,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp failure_retry_delay(attempt) do
     max_delay_power = min(attempt - 1, 10)
-    min(@failure_retry_base_ms * (1 <<< max_delay_power), Config.max_retry_backoff_ms())
+    min(Config.agent_retry_base_ms() * (1 <<< max_delay_power), Config.max_retry_backoff_ms())
   end
 
   defp normalize_retry_attempt(attempt) when is_integer(attempt) and attempt > 0, do: attempt

@@ -104,6 +104,8 @@ defmodule SymphonyElixir.TestSupport do
           max_concurrent_agents: 10,
           max_turns: 20,
           max_retry_backoff_ms: 300_000,
+          agent_retry_base_ms: nil,
+          agent_continuation_delay_ms: nil,
           max_concurrent_agents_by_state: %{},
           codex_command: "codex app-server",
           codex_approval_policy: %{reject: %{sandbox_approval: true, rules: true, mcp_elicitations: true}},
@@ -122,6 +124,13 @@ defmodule SymphonyElixir.TestSupport do
           observability_render_interval_ms: 16,
           server_port: nil,
           server_host: nil,
+          notification_telegram_bot_token: nil,
+          notification_telegram_chat_id: nil,
+          notification_gate_states: nil,
+          notification_template: "🧹 {{ issue.identifier }}: moved to {{ issue.state }}. Review results in workspace.",
+          gates: nil,
+          labels: nil,
+          states: nil,
           prompt: @workflow_prompt
         ],
         overrides
@@ -139,6 +148,8 @@ defmodule SymphonyElixir.TestSupport do
     max_concurrent_agents = Keyword.get(config, :max_concurrent_agents)
     max_turns = Keyword.get(config, :max_turns)
     max_retry_backoff_ms = Keyword.get(config, :max_retry_backoff_ms)
+    agent_retry_base_ms = Keyword.get(config, :agent_retry_base_ms)
+    agent_continuation_delay_ms = Keyword.get(config, :agent_continuation_delay_ms)
     max_concurrent_agents_by_state = Keyword.get(config, :max_concurrent_agents_by_state)
     codex_command = Keyword.get(config, :codex_command)
     codex_approval_policy = Keyword.get(config, :codex_approval_policy)
@@ -157,6 +168,13 @@ defmodule SymphonyElixir.TestSupport do
     observability_render_interval_ms = Keyword.get(config, :observability_render_interval_ms)
     server_port = Keyword.get(config, :server_port)
     server_host = Keyword.get(config, :server_host)
+    notification_telegram_bot_token = Keyword.get(config, :notification_telegram_bot_token)
+    notification_telegram_chat_id = Keyword.get(config, :notification_telegram_chat_id)
+    notification_gate_states = Keyword.get(config, :notification_gate_states)
+    notification_template = Keyword.get(config, :notification_template)
+    gates = Keyword.get(config, :gates)
+    labels = Keyword.get(config, :labels)
+    states = Keyword.get(config, :states)
     prompt = Keyword.get(config, :prompt)
 
     sections =
@@ -178,6 +196,9 @@ defmodule SymphonyElixir.TestSupport do
         "  max_concurrent_agents: #{yaml_value(max_concurrent_agents)}",
         "  max_turns: #{yaml_value(max_turns)}",
         "  max_retry_backoff_ms: #{yaml_value(max_retry_backoff_ms)}",
+        agent_retry_base_ms && "  retry_base_ms: #{yaml_value(agent_retry_base_ms)}",
+        agent_continuation_delay_ms &&
+          "  continuation_delay_ms: #{yaml_value(agent_continuation_delay_ms)}",
         "  max_concurrent_agents_by_state: #{yaml_value(max_concurrent_agents_by_state)}",
         "codex:",
         "  command: #{yaml_value(codex_command)}",
@@ -190,6 +211,15 @@ defmodule SymphonyElixir.TestSupport do
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
+        notifications_yaml(
+          notification_telegram_bot_token,
+          notification_telegram_chat_id,
+          notification_gate_states,
+          notification_template
+        ),
+        gates_yaml(gates),
+        labels_yaml(labels),
+        states_yaml(states),
         "---",
         prompt
       ]
@@ -254,6 +284,45 @@ defmodule SymphonyElixir.TestSupport do
       host && "  host: #{yaml_value(host)}"
     ]
     |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp notifications_yaml(bot_token, chat_id, gate_states, template) do
+    [
+      "notifications:",
+      "  telegram:",
+      "    bot_token: #{yaml_value(bot_token)}",
+      "    chat_id: #{yaml_value(chat_id)}",
+      "  gate_states: #{yaml_value(gate_states)}",
+      "  template: #{yaml_value(template)}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp gates_yaml(nil), do: nil
+
+  defp gates_yaml(gates) when is_map(gates) do
+    [
+      "gates: #{yaml_value(gates)}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp labels_yaml(nil), do: nil
+
+  defp labels_yaml(labels) when is_map(labels) do
+    [
+      "labels: #{yaml_value(labels)}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp states_yaml(nil), do: nil
+
+  defp states_yaml(states) when is_map(states) do
+    [
+      "states: #{yaml_value(states)}"
+    ]
     |> Enum.join("\n")
   end
 

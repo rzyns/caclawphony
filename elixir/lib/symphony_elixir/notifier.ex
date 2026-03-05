@@ -4,12 +4,17 @@ defmodule SymphonyElixir.Notifier do
   """
 
   require Logger
+  alias SymphonyElixir.Config
+  alias SymphonyElixir.Linear.Issue
 
   @spec notify(String.t() | nil, String.t() | nil) :: :ok
   def notify(issue_identifier, state_name) do
-    case telegram_credentials() do
+    issue_context = issue_context(issue_identifier, state_name)
+    notifications = Config.notifications()
+
+    case telegram_credentials(notifications) do
       {:ok, token, chat_id} ->
-        send_telegram_message(token, chat_id, issue_identifier, state_name)
+        send_telegram_message(token, chat_id, issue_context, notifications.template)
 
       {:error, reason} ->
         Logger.warning("Telegram notification skipped for issue=#{inspect(issue_identifier)} state=#{inspect(state_name)} reason=#{inspect(reason)}")
@@ -18,10 +23,17 @@ defmodule SymphonyElixir.Notifier do
     :ok
   end
 
-  defp send_telegram_message(token, chat_id, issue_identifier, state_name) do
+  @spec notify(Issue.t()) :: :ok
+  def notify(%Issue{} = issue) do
+    notify(issue.identifier, issue.state)
+  end
+
+  defp send_telegram_message(token, chat_id, issue_context, template) do
+    text = render_template(template, issue_context)
+
     payload = %{
       chat_id: chat_id,
-      text: "🧹 #{format_message_field(issue_identifier)}: moved to #{format_message_field(state_name)}. Review results in workspace."
+      text: text
     }
 
     url = "https://api.telegram.org/bot#{token}/sendMessage"
@@ -31,25 +43,59 @@ defmodule SymphonyElixir.Notifier do
         :ok
 
       {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.warning("Telegram notification failed for issue=#{inspect(issue_identifier)} state=#{inspect(state_name)} status=#{status} body=#{inspect(body)}")
+        Logger.warning("Telegram notification failed for issue=#{inspect(issue_context["identifier"])} state=#{inspect(issue_context["state"])} status=#{status} body=#{inspect(body)}")
 
       {:error, reason} ->
-        Logger.warning("Telegram notification request error for issue=#{inspect(issue_identifier)} state=#{inspect(state_name)} error=#{inspect(reason)}")
+        Logger.warning("Telegram notification request error for issue=#{inspect(issue_context["identifier"])} state=#{inspect(issue_context["state"])} error=#{inspect(reason)}")
     end
   rescue
     exception ->
-      Logger.warning("Telegram notification crashed for issue=#{inspect(issue_identifier)} state=#{inspect(state_name)} error=#{Exception.message(exception)}")
+      Logger.warning("Telegram notification crashed for issue=#{inspect(issue_context["identifier"])} state=#{inspect(issue_context["state"])} error=#{Exception.message(exception)}")
   end
 
-  defp telegram_credentials do
-    token = System.get_env("TELEGRAM_BOT_TOKEN")
-    chat_id = System.get_env("TELEGRAM_CHAT_ID")
+  defp telegram_credentials(notifications) do
+    token = get_in(notifications, [:telegram, :bot_token])
+    chat_id = get_in(notifications, [:telegram, :chat_id])
 
     cond do
       is_nil(token) or token == "" -> {:error, :missing_telegram_bot_token}
       is_nil(chat_id) or chat_id == "" -> {:error, :missing_telegram_chat_id}
       true -> {:ok, token, chat_id}
     end
+  end
+
+  defp render_template(template, issue_context) do
+    template =
+      case String.trim(to_string(template || "")) do
+        "" -> Config.notification_template()
+        configured -> configured
+      end
+
+    try do
+      template
+      |> Solid.parse!()
+      |> Solid.render!(%{"issue" => issue_context}, strict_variables: true, strict_filters: true)
+      |> IO.iodata_to_binary()
+      |> case do
+        "" -> default_message(issue_context)
+        rendered -> rendered
+      end
+    rescue
+      error ->
+        Logger.warning("Telegram notification template render failed for issue=#{inspect(issue_context["identifier"])} state=#{inspect(issue_context["state"])} error=#{Exception.message(error)}")
+        default_message(issue_context)
+    end
+  end
+
+  defp default_message(issue_context) do
+    "🧹 #{format_message_field(issue_context["identifier"])}: moved to #{format_message_field(issue_context["state"])}. Review results in workspace."
+  end
+
+  defp issue_context(issue_identifier, state_name) do
+    %{
+      "identifier" => issue_identifier,
+      "state" => state_name
+    }
   end
 
   defp format_message_field(value) when is_binary(value) and byte_size(value) > 0, do: value

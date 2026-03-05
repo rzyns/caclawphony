@@ -346,6 +346,58 @@ defmodule SymphonyElixir.CoreTest do
     end
   end
 
+  test "custom notification gate states come from workflow config" do
+    previous_token = System.get_env("TELEGRAM_BOT_TOKEN")
+    previous_chat_id = System.get_env("TELEGRAM_CHAT_ID")
+    on_exit(fn -> restore_env("TELEGRAM_BOT_TOKEN", previous_token) end)
+    on_exit(fn -> restore_env("TELEGRAM_CHAT_ID", previous_chat_id) end)
+    System.delete_env("TELEGRAM_BOT_TOKEN")
+    System.delete_env("TELEGRAM_CHAT_ID")
+
+    issue_id = "issue-custom-gate"
+    issue_identifier = "MT-558"
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_active_states: ["Todo", "In Progress", "In Review"],
+      tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate"],
+      notification_gate_states: ["Quality Gate"]
+    )
+
+    state = %Orchestrator.State{
+      running: %{
+        issue_id => %{
+          pid: self(),
+          ref: nil,
+          identifier: issue_identifier,
+          issue: %Issue{id: issue_id, state: "Todo", identifier: issue_identifier},
+          started_at: DateTime.utc_now()
+        }
+      },
+      claimed: MapSet.new([issue_id]),
+      codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+      retry_attempts: %{}
+    }
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: issue_identifier,
+      state: "Quality Gate",
+      title: "Custom gate",
+      description: "Configured gate state",
+      labels: []
+    }
+
+    log =
+      capture_log(fn ->
+        updated_state = Orchestrator.reconcile_issue_states_for_test([issue], state)
+        refute Map.has_key?(updated_state.running, issue_id)
+        refute MapSet.member?(updated_state.claimed, issue_id)
+      end)
+
+    assert log =~ "Telegram notification skipped"
+    assert log =~ "missing_telegram_bot_token"
+  end
+
   test "terminal issue state stops running agent and cleans workspace" do
     test_root =
       Path.join(
@@ -535,6 +587,69 @@ defmodule SymphonyElixir.CoreTest do
     assert_due_in_range(due_at_ms, 500, 1_100)
   end
 
+  test "retry delays use configurable agent continuation and base settings" do
+    issue_id = "issue-configurable-retry"
+    ref = make_ref()
+    orchestrator_name = Module.concat(__MODULE__, :ConfigurableRetryOrchestrator)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      agent_continuation_delay_ms: 2_000,
+      agent_retry_base_ms: 20_000
+    )
+
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        Process.exit(pid, :normal)
+      end
+    end)
+
+    initial_state = :sys.get_state(pid)
+
+    running_entry = %{
+      pid: self(),
+      ref: ref,
+      identifier: "MT-562",
+      issue: %Issue{id: issue_id, identifier: "MT-562", state: "In Progress"},
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn _ ->
+      initial_state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.new([issue_id]))
+      |> Map.put(:retry_attempts, %{})
+    end)
+
+    send(pid, {:DOWN, ref, :process, self(), :normal})
+    Process.sleep(50)
+    continuation_state = :sys.get_state(pid)
+
+    assert %{attempt: 1, due_at_ms: continuation_due_at_ms} =
+             continuation_state.retry_attempts[issue_id]
+
+    assert_due_in_range(continuation_due_at_ms, 1_400, 2_200)
+
+    :sys.replace_state(pid, fn state ->
+      state
+      |> Map.put(:running, %{
+        issue_id => Map.put(running_entry, :retry_attempt, 0)
+      })
+      |> Map.put(:claimed, MapSet.new([issue_id]))
+      |> Map.put(:retry_attempts, %{})
+    end)
+
+    send(pid, {:DOWN, ref, :process, self(), :boom})
+    Process.sleep(50)
+    failure_state = :sys.get_state(pid)
+
+    assert %{attempt: 1, due_at_ms: failure_due_at_ms, error: "agent exited: :boom"} =
+             failure_state.retry_attempts[issue_id]
+
+    assert_due_in_range(failure_due_at_ms, 19_000, 20_500)
+  end
+
   test "abnormal worker exit increments retry attempt progressively" do
     issue_id = "issue-crash"
     ref = make_ref()
@@ -645,6 +760,34 @@ defmodule SymphonyElixir.CoreTest do
     assert prompt =~ "Ticket S-1 Refactor backend request path"
     assert prompt =~ "labels=backend"
     assert prompt =~ "attempt=3"
+  end
+
+  test "prompt builder renders config-backed labels, gates, and states variables" do
+    workflow_prompt =
+      "review={{ labels.recommendation.review }} gate={{ gates.review_complete.state_id }} assignee={{ gates.review_complete.assignee }} todo={{ states.todo }}"
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      prompt: workflow_prompt,
+      labels: %{"recommendation" => %{"review" => "label-review"}},
+      gates: %{"review_complete" => %{"state_id" => "state-review", "assignee" => "assignee-review"}},
+      states: %{"todo" => "state-todo"}
+    )
+
+    issue = %Issue{
+      identifier: "S-2",
+      title: "Template vars",
+      description: "Use config variables",
+      state: "Todo",
+      url: "https://example.org/issues/S-2",
+      labels: ["backend"]
+    }
+
+    prompt = PromptBuilder.build_prompt(issue)
+
+    assert prompt =~ "review=label-review"
+    assert prompt =~ "gate=state-review"
+    assert prompt =~ "assignee=assignee-review"
+    assert prompt =~ "todo=state-todo"
   end
 
   test "prompt builder renders issue datetime fields without crashing" do

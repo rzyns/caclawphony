@@ -708,6 +708,12 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     write_workflow_file!(Workflow.workflow_file_path(), max_concurrent_agents: "bad")
     assert Config.max_concurrent_agents() == 10
 
+    write_workflow_file!(Workflow.workflow_file_path(), agent_retry_base_ms: "bad")
+    assert Config.agent_retry_base_ms() == 10_000
+
+    write_workflow_file!(Workflow.workflow_file_path(), agent_continuation_delay_ms: "bad")
+    assert Config.agent_continuation_delay_ms() == 1_000
+
     write_workflow_file!(Workflow.workflow_file_path(), codex_turn_timeout_ms: "bad")
     assert Config.codex_turn_timeout_ms() == 3_600_000
 
@@ -737,6 +743,8 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert Config.poll_interval_ms() == 30_000
     assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
     assert Config.max_retry_backoff_ms() == 300_000
+    assert Config.agent_retry_base_ms() == 10_000
+    assert Config.agent_continuation_delay_ms() == 1_000
     assert Config.max_concurrent_agents_for_state("Todo") == 1
     assert Config.max_concurrent_agents_for_state("Review") == 10
     assert Config.hook_timeout_ms() == 60_000
@@ -745,6 +753,31 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert Config.observability_render_interval_ms() == 16
     assert Config.server_port() == nil
     assert Config.server_host() == "123"
+    assert Config.notification_gate_states() == ["Review Complete", "Prepare Complete"]
+    assert Config.notification_template() =~ "🧹"
+    assert Config.notifications().telegram.bot_token == nil
+    assert Config.notifications().telegram.chat_id == nil
+
+    assert Config.gates() == %{
+             "prepare_complete" => %{
+               "state_id" => "0671e7cc-46b5-424e-aed3-d9408c9d3eb9",
+               "assignee" => "5bbd2a49-0fde-4fdd-b265-f6991c718e87",
+               "notify" => true
+             },
+             "review_complete" => %{
+               "state_id" => "4f363475-bf45-48a0-9466-c38eef79aded",
+               "assignee" => "5bbd2a49-0fde-4fdd-b265-f6991c718e87",
+               "notify" => true
+             }
+           }
+
+    assert Config.states() == %{
+             "todo" => "0772f6b2-85fa-4c21-ab14-6705687d475f"
+           }
+
+    assert Config.labels()["recommendation"]["review"] == "884ba56a-fb80-4c83-a35e-90ab4dbff32a"
+    assert Config.labels()["recommendation"]["wait"] == "e2cfbdbb-13e3-4ccc-adeb-5abd00e2b7f9"
+    assert Config.labels()["subsystem"]["gateway"] == "dc7faf59-f14a-4f03-a549-c0f7fa68ae91"
 
     write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: "")
 
@@ -802,29 +835,43 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
   test "config resolves $VAR references for env-backed secret and path values" do
     workspace_env_var = "SYMP_WORKSPACE_ROOT_#{System.unique_integer([:positive])}"
     api_key_env_var = "SYMP_LINEAR_API_KEY_#{System.unique_integer([:positive])}"
+    bot_token_env_var = "SYMP_TELEGRAM_BOT_TOKEN_#{System.unique_integer([:positive])}"
+    chat_id_env_var = "SYMP_TELEGRAM_CHAT_ID_#{System.unique_integer([:positive])}"
     workspace_root = Path.join("/tmp", "symphony-workspace-root")
     api_key = "resolved-secret"
+    bot_token = "resolved-bot-token"
+    chat_id = "resolved-chat-id"
     codex_bin = Path.join(["~", "bin", "codex"])
 
     previous_workspace_root = System.get_env(workspace_env_var)
     previous_api_key = System.get_env(api_key_env_var)
+    previous_bot_token = System.get_env(bot_token_env_var)
+    previous_chat_id = System.get_env(chat_id_env_var)
 
     System.put_env(workspace_env_var, workspace_root)
     System.put_env(api_key_env_var, api_key)
+    System.put_env(bot_token_env_var, bot_token)
+    System.put_env(chat_id_env_var, chat_id)
 
     on_exit(fn ->
       restore_env(workspace_env_var, previous_workspace_root)
       restore_env(api_key_env_var, previous_api_key)
+      restore_env(bot_token_env_var, previous_bot_token)
+      restore_env(chat_id_env_var, previous_chat_id)
     end)
 
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: "$#{api_key_env_var}",
       workspace_root: "$#{workspace_env_var}",
+      notification_telegram_bot_token: "$#{bot_token_env_var}",
+      notification_telegram_chat_id: "$#{chat_id_env_var}",
       codex_command: "#{codex_bin} app-server"
     )
 
     assert Config.linear_api_token() == api_key
     assert Config.workspace_root() == Path.expand(workspace_root)
+    assert Config.notifications().telegram.bot_token == bot_token
+    assert Config.notifications().telegram.chat_id == chat_id
     assert Config.codex_command() == "#{codex_bin} app-server"
   end
 
@@ -874,6 +921,49 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert Config.max_concurrent_agents_for_state("In Review") == 2
     assert Config.max_concurrent_agents_for_state("Closed") == 10
     assert Config.max_concurrent_agents_for_state(:not_a_string) == 10
+  end
+
+  test "config derives notification gate states from gates when no explicit list is set" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      notification_gate_states: nil,
+      gates: %{
+        "review_complete" => %{
+          "state_id" => "4f363475-bf45-48a0-9466-c38eef79aded",
+          "assignee" => "reviewer",
+          "notify" => false
+        },
+        "prepare_complete" => %{
+          "state_id" => "0671e7cc-46b5-424e-aed3-d9408c9d3eb9",
+          "assignee" => "preparer",
+          "notify" => true
+        },
+        "human_gate" => %{
+          "state_id" => "state-human-gate",
+          "assignee" => "human",
+          "notify" => true
+        }
+      }
+    )
+
+    assert Config.notification_gate_states() == ["Prepare Complete", "Human Gate"]
+    assert Config.gates()["human_gate"]["state_id"] == "state-human-gate"
+    assert Config.gates()["human_gate"]["assignee"] == "human"
+    assert Config.gates()["human_gate"]["notify"] == true
+  end
+
+  test "config supports label and state overrides from workflow" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      labels: %{
+        "recommendation" => %{"review" => "review-override"},
+        "subsystem" => %{"gateway" => "gateway-override"}
+      },
+      states: %{"todo" => "todo-override", "custom" => "custom-state-id"}
+    )
+
+    assert Config.labels()["recommendation"]["review"] == "review-override"
+    assert Config.labels()["subsystem"]["gateway"] == "gateway-override"
+    assert Config.states()["todo"] == "todo-override"
+    assert Config.states()["custom"] == "custom-state-id"
   end
 
   test "workflow prompt is used when building base prompt" do

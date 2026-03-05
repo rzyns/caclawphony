@@ -28,6 +28,45 @@ defmodule SymphonyElixir.Config do
   @default_max_concurrent_agents 10
   @default_agent_max_turns 20
   @default_max_retry_backoff_ms 300_000
+  @default_agent_retry_base_ms 10_000
+  @default_agent_continuation_delay_ms 1_000
+  @default_notification_gate_states []
+  @default_notification_template "🧹 {{ issue.identifier }}: moved to {{ issue.state }}. Review results in workspace."
+  @default_gate_assignee "5bbd2a49-0fde-4fdd-b265-f6991c718e87"
+  @default_states %{
+    "todo" => "0772f6b2-85fa-4c21-ab14-6705687d475f"
+  }
+  @default_labels %{
+    "recommendation" => %{
+      "review" => "884ba56a-fb80-4c83-a35e-90ab4dbff32a",
+      "wait" => "e2cfbdbb-13e3-4ccc-adeb-5abd00e2b7f9",
+      "skip" => "8488053c-9614-4fba-a84e-f2b8b8e65d32"
+    },
+    "subsystem" => %{
+      "gateway" => "dc7faf59-f14a-4f03-a549-c0f7fa68ae91",
+      "channels" => "69c1023d-71ee-43b3-ab2c-c2dbb2a3b93a",
+      "browser" => "4d8f75c4-96e0-4ba3-afe0-d47d36ffe48a",
+      "agents" => "406758af-c1ca-490e-800e-b8fcaa199d07",
+      "config" => "ac615836-f2a0-48b3-906c-fcf5f8e61c72",
+      "cli" => "904c5231-c8b2-4f68-9db0-2d7ca16a5607",
+      "runtime" => "e2a2870b-cd3e-4b9c-a2ec-6e116e2e1efc",
+      "auth" => "34fc1c6d-e47a-4e3e-9a51-b9cdade2f5d9",
+      "providers" => "74bb9b68-bd9b-4c88-b5c2-56ec3b0a4bde",
+      "docs" => "49152b2e-0c39-470e-9b27-3f71e1f27da7"
+    }
+  }
+  @default_gates %{
+    "review_complete" => %{
+      "state_id" => "4f363475-bf45-48a0-9466-c38eef79aded",
+      "assignee" => @default_gate_assignee,
+      "notify" => true
+    },
+    "prepare_complete" => %{
+      "state_id" => "0671e7cc-46b5-424e-aed3-d9408c9d3eb9",
+      "assignee" => @default_gate_assignee,
+      "notify" => true
+    }
+  }
   @default_codex_command "codex app-server"
   @default_codex_turn_timeout_ms 3_600_000
   @default_codex_read_timeout_ms 5_000
@@ -94,6 +133,14 @@ defmodule SymphonyElixir.Config do
                                    type: :pos_integer,
                                    default: @default_max_retry_backoff_ms
                                  ],
+                                 retry_base_ms: [
+                                   type: :pos_integer,
+                                   default: @default_agent_retry_base_ms
+                                 ],
+                                 continuation_delay_ms: [
+                                   type: :pos_integer,
+                                   default: @default_agent_continuation_delay_ms
+                                 ],
                                  max_concurrent_agents_by_state: [
                                    type: {:map, :string, :pos_integer},
                                    default: %{}
@@ -155,6 +202,37 @@ defmodule SymphonyElixir.Config do
                                  port: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                                  host: [type: :string, default: @default_server_host]
                                ]
+                             ],
+                             notifications: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 telegram: [
+                                   type: :map,
+                                   default: %{},
+                                   keys: [
+                                     bot_token: [type: {:or, [:string, nil]}, default: nil],
+                                     chat_id: [type: {:or, [:string, nil]}, default: nil]
+                                   ]
+                                 ],
+                                 gate_states: [
+                                   type: {:list, :string},
+                                   default: @default_notification_gate_states
+                                 ],
+                                 template: [type: :string, default: @default_notification_template]
+                               ]
+                             ],
+                             gates: [
+                               type: {:map, :string, :map},
+                               default: %{}
+                             ],
+                             labels: [
+                               type: :map,
+                               default: %{}
+                             ],
+                             states: [
+                               type: :map,
+                               default: %{}
                              ]
                            )
 
@@ -259,6 +337,16 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:agent, :max_retry_backoff_ms])
   end
 
+  @spec agent_retry_base_ms() :: pos_integer()
+  def agent_retry_base_ms do
+    get_in(validated_workflow_options(), [:agent, :retry_base_ms])
+  end
+
+  @spec agent_continuation_delay_ms() :: pos_integer()
+  def agent_continuation_delay_ms do
+    get_in(validated_workflow_options(), [:agent, :continuation_delay_ms])
+  end
+
   @spec agent_max_turns() :: pos_integer()
   def agent_max_turns do
     get_in(validated_workflow_options(), [:agent, :max_turns])
@@ -328,6 +416,101 @@ defmodule SymphonyElixir.Config do
       _ ->
         @default_prompt_template
     end
+  end
+
+  @spec notifications() :: %{
+          telegram: %{
+            bot_token: String.t() | nil,
+            chat_id: String.t() | nil
+          },
+          gate_states: [String.t()],
+          template: String.t()
+        }
+  def notifications do
+    notification_settings = get_in(validated_workflow_options(), [:notifications])
+    telegram_settings = Map.get(notification_settings, :telegram, %{})
+
+    %{
+      telegram: %{
+        bot_token:
+          telegram_settings
+          |> Map.get(:bot_token)
+          |> resolve_env_value(System.get_env("TELEGRAM_BOT_TOKEN"))
+          |> normalize_secret_value(),
+        chat_id:
+          telegram_settings
+          |> Map.get(:chat_id)
+          |> resolve_env_value(System.get_env("TELEGRAM_CHAT_ID"))
+          |> normalize_secret_value()
+      },
+      gate_states: notification_gate_states(),
+      template: Map.get(notification_settings, :template, @default_notification_template)
+    }
+  end
+
+  @spec gates() :: %{String.t() => %{String.t() => String.t() | boolean() | nil}}
+  def gates do
+    configured_gates = get_in(validated_workflow_options(), [:gates]) || %{}
+    default_assignee = @default_gate_assignee
+
+    @default_gates
+    |> merge_gate_definitions(configured_gates)
+    |> Enum.into(%{}, fn {gate_name, gate_options} ->
+      {gate_name, normalize_gate_options(gate_options, default_assignee)}
+    end)
+  end
+
+  @spec labels() :: %{String.t() => term()}
+  def labels do
+    configured_labels = get_in(validated_workflow_options(), [:labels]) || %{}
+
+    @default_labels
+    |> deep_merge_maps(configured_labels)
+    |> keep_string_values_only()
+    |> case do
+      :omit -> %{}
+      labels -> labels
+    end
+  end
+
+  @spec states() :: %{String.t() => String.t()}
+  def states do
+    configured_states = get_in(validated_workflow_options(), [:states]) || %{}
+
+    @default_states
+    |> Map.merge(normalize_keys(configured_states))
+    |> Enum.reduce(%{}, fn {state_name, state_id}, acc ->
+      case state_id |> resolve_env_value(nil) |> normalize_secret_value() do
+        nil -> acc
+        resolved_state_id -> Map.put(acc, state_name, resolved_state_id)
+      end
+    end)
+  end
+
+  @spec notification_gate_states() :: [String.t()]
+  def notification_gate_states do
+    configured_gate_states = get_in(validated_workflow_options(), [:notifications, :gate_states]) || []
+
+    case configured_gate_states do
+      [] ->
+        gates()
+        |> Enum.reduce([], fn {gate_name, gate_options}, acc ->
+          if gate_options["notify"] == true do
+            [gate_name_to_state(gate_name) | acc]
+          else
+            acc
+          end
+        end)
+        |> Enum.reverse()
+
+      states ->
+        states
+    end
+  end
+
+  @spec notification_template() :: String.t()
+  def notification_template do
+    notifications().template
   end
 
   @spec observability_enabled?() :: boolean()
@@ -453,7 +636,11 @@ defmodule SymphonyElixir.Config do
       codex: extract_codex_options(section_map(config, "codex")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
-      server: extract_server_options(section_map(config, "server"))
+      server: extract_server_options(section_map(config, "server")),
+      notifications: extract_notifications_options(section_map(config, "notifications")),
+      gates: extract_gates_options(section_map(config, "gates")),
+      labels: extract_labels_options(section_map(config, "labels")),
+      states: extract_states_options(section_map(config, "states"))
     }
   end
 
@@ -482,6 +669,11 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:max_concurrent_agents, integer_value(Map.get(section, "max_concurrent_agents")))
     |> put_if_present(:max_turns, positive_integer_value(Map.get(section, "max_turns")))
     |> put_if_present(:max_retry_backoff_ms, positive_integer_value(Map.get(section, "max_retry_backoff_ms")))
+    |> put_if_present(:retry_base_ms, positive_integer_value(Map.get(section, "retry_base_ms")))
+    |> put_if_present(
+      :continuation_delay_ms,
+      positive_integer_value(Map.get(section, "continuation_delay_ms"))
+    )
     |> put_if_present(
       :max_concurrent_agents_by_state,
       state_limits_value(Map.get(section, "max_concurrent_agents_by_state"))
@@ -516,6 +708,77 @@ defmodule SymphonyElixir.Config do
     %{}
     |> put_if_present(:port, non_negative_integer_value(Map.get(section, "port")))
     |> put_if_present(:host, scalar_string_value(Map.get(section, "host")))
+  end
+
+  defp extract_notifications_options(section) do
+    %{}
+    |> put_if_present(:telegram, extract_notification_telegram_options(section_map(section, "telegram")))
+    |> put_if_present(:gate_states, csv_value(Map.get(section, "gate_states")))
+    |> put_if_present(:template, notification_template_value(Map.get(section, "template")))
+  end
+
+  defp extract_gates_options(section) when is_map(section) do
+    Enum.reduce(section, %{}, fn {gate_name, gate_options}, acc ->
+      normalized_gate_name = normalize_gate_name(gate_name)
+
+      case extract_gate_options(gate_options) do
+        :omit -> acc
+        normalized_gate_options -> Map.put(acc, normalized_gate_name, normalized_gate_options)
+      end
+    end)
+  end
+
+  defp extract_gates_options(_section), do: :omit
+
+  defp extract_gate_options(gate_options) when is_map(gate_options) do
+    gate_options = normalize_keys(gate_options)
+
+    gate_options =
+      %{}
+      |> put_if_present(:state_id, binary_value(Map.get(gate_options, "state_id")))
+      |> put_if_present(:assignee, binary_value(Map.get(gate_options, "assignee"), allow_empty: true))
+      |> put_if_present(:notify, boolean_value(Map.get(gate_options, "notify")))
+
+    if map_size(gate_options) > 0 do
+      gate_options
+    else
+      :omit
+    end
+  end
+
+  defp extract_gate_options(_gate_options), do: :omit
+
+  defp extract_labels_options(section) when is_map(section) do
+    case nested_string_map_value(section) do
+      %{} = labels when map_size(labels) > 0 -> labels
+      _ -> :omit
+    end
+  end
+
+  defp extract_labels_options(_section), do: :omit
+
+  defp extract_states_options(section) when is_map(section) do
+    section
+    |> normalize_keys()
+    |> Enum.reduce(%{}, fn {state_name, raw_state_id}, acc ->
+      case scalar_string_value(raw_state_id) do
+        :omit -> acc
+        "" -> acc
+        state_id -> Map.put(acc, state_name, state_id)
+      end
+    end)
+    |> case do
+      states when map_size(states) > 0 -> states
+      _ -> :omit
+    end
+  end
+
+  defp extract_states_options(_section), do: :omit
+
+  defp extract_notification_telegram_options(section) do
+    %{}
+    |> put_if_present(:bot_token, binary_value(Map.get(section, "bot_token"), allow_empty: true))
+    |> put_if_present(:chat_id, binary_value(Map.get(section, "chat_id"), allow_empty: true))
   end
 
   defp section_map(config, key) do
@@ -567,6 +830,15 @@ defmodule SymphonyElixir.Config do
   end
 
   defp hook_command_value(_value), do: :omit
+
+  defp notification_template_value(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> :omit
+      _ -> value
+    end
+  end
+
+  defp notification_template_value(_value), do: :omit
 
   defp csv_value(values) when is_list(values) do
     values
@@ -791,6 +1063,117 @@ defmodule SymphonyElixir.Config do
   end
 
   defp normalize_tracker_kind(_kind), do: nil
+
+  defp normalize_gate_name(gate_name) when is_binary(gate_name) do
+    gate_name
+    |> String.trim()
+    |> String.downcase()
+  end
+
+  defp normalize_gate_name(gate_name) when is_atom(gate_name) do
+    gate_name
+    |> Atom.to_string()
+    |> normalize_gate_name()
+  end
+
+  defp normalize_gate_name(gate_name), do: gate_name |> to_string() |> normalize_gate_name()
+
+  defp gate_name_to_state(gate_name) when is_binary(gate_name) do
+    gate_name
+    |> String.trim()
+    |> String.split("_", trim: true)
+    |> Enum.map(&String.capitalize/1)
+    |> Enum.join(" ")
+  end
+
+  defp gate_name_to_state(_gate_name), do: nil
+
+  defp nested_string_map_value(value) when is_map(value) do
+    value
+    |> normalize_keys()
+    |> Enum.reduce(%{}, fn {key, nested_value}, acc ->
+      case nested_string_map_value(nested_value) do
+        :omit -> acc
+        normalized_value -> Map.put(acc, key, normalized_value)
+      end
+    end)
+    |> case do
+      result when map_size(result) > 0 -> result
+      _ -> :omit
+    end
+  end
+
+  defp nested_string_map_value(value) do
+    case scalar_string_value(value) do
+      :omit -> :omit
+      "" -> :omit
+      normalized_value -> normalized_value
+    end
+  end
+
+  defp merge_gate_definitions(default_gates, configured_gates) do
+    normalized_configured_gates = normalize_keys(configured_gates)
+
+    Map.merge(default_gates, normalized_configured_gates, fn _gate_name, default_gate, configured_gate ->
+      Map.merge(default_gate, configured_gate)
+    end)
+  end
+
+  defp deep_merge_maps(default_map, configured_map)
+       when is_map(default_map) and is_map(configured_map) do
+    normalized_configured_map = normalize_keys(configured_map)
+
+    Map.merge(default_map, normalized_configured_map, fn _key, default_value, configured_value ->
+      deep_merge_maps(default_value, configured_value)
+    end)
+  end
+
+  defp deep_merge_maps(_default_value, configured_value), do: configured_value
+
+  defp keep_string_values_only(value) when is_map(value) do
+    value
+    |> Enum.reduce(%{}, fn {key, nested_value}, acc ->
+      case keep_string_values_only(nested_value) do
+        :omit -> acc
+        normalized_value -> Map.put(acc, key, normalized_value)
+      end
+    end)
+    |> case do
+      result when map_size(result) > 0 -> result
+      _ -> :omit
+    end
+  end
+
+  defp keep_string_values_only(value) when is_binary(value), do: value
+  defp keep_string_values_only(_value), do: :omit
+
+  defp normalize_gate_options(gate_options, default_assignee) when is_map(gate_options) do
+    state_id =
+      gate_options
+      |> Map.get("state_id")
+      |> resolve_env_value(nil)
+      |> normalize_secret_value()
+
+    assignee =
+      gate_options
+      |> Map.get("assignee")
+      |> resolve_env_value(default_assignee)
+      |> normalize_secret_value()
+
+    %{
+      "state_id" => state_id,
+      "assignee" => assignee,
+      "notify" => if(is_boolean(gate_options["notify"]), do: gate_options["notify"], else: true)
+    }
+  end
+
+  defp normalize_gate_options(_gate_options, default_assignee) do
+    %{
+      "state_id" => nil,
+      "assignee" => normalize_secret_value(default_assignee),
+      "notify" => true
+    }
+  end
 
   defp workflow_config do
     case current_workflow() do

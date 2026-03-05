@@ -53,6 +53,8 @@ agent:
   max_concurrent_agents: 4
   max_turns: 20
   max_retry_backoff_ms: 300000
+  retry_base_ms: 10000
+  continuation_delay_ms: 1000
   max_concurrent_agents_by_state:
     prepare: 1
 
@@ -65,6 +67,45 @@ codex:
   thread_sandbox: danger-full-access
   turn_sandbox_policy:
     type: dangerFullAccess
+
+notifications:
+  telegram:
+    bot_token: $TELEGRAM_BOT_TOKEN
+    chat_id: $TELEGRAM_CHAT_ID
+  gate_states:
+    - Review Complete
+    - Prepare Complete
+  template: "{{ issue.identifier }}: moved to {{ issue.state }}. Review results in workspace."
+
+gates:
+  review_complete:
+    state_id: "4f363475-bf45-48a0-9466-c38eef79aded"
+    assignee: "5bbd2a49-0fde-4fdd-b265-f6991c718e87"
+    notify: true
+  prepare_complete:
+    state_id: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9"
+    assignee: "5bbd2a49-0fde-4fdd-b265-f6991c718e87"
+    notify: true
+
+states:
+  todo: "0772f6b2-85fa-4c21-ab14-6705687d475f"
+
+labels:
+  recommendation:
+    review: "884ba56a-fb80-4c83-a35e-90ab4dbff32a"
+    wait: "e2cfbdbb-13e3-4ccc-adeb-5abd00e2b7f9"
+    skip: "8488053c-9614-4fba-a84e-f2b8b8e65d32"
+  subsystem:
+    gateway: "dc7faf59-f14a-4f03-a549-c0f7fa68ae91"
+    channels: "69c1023d-71ee-43b3-ab2c-c2dbb2a3b93a"
+    browser: "4d8f75c4-96e0-4ba3-afe0-d47d36ffe48a"
+    agents: "406758af-c1ca-490e-800e-b8fcaa199d07"
+    config: "ac615836-f2a0-48b3-906c-fcf5f8e61c72"
+    cli: "904c5231-c8b2-4f68-9db0-2d7ca16a5607"
+    runtime: "e2a2870b-cd3e-4b9c-a2ec-6e116e2e1efc"
+    auth: "34fc1c6d-e47a-4e3e-9a51-b9cdade2f5d9"
+    providers: "74bb9b68-bd9b-4c88-b5c2-56ec3b0a4bde"
+    docs: "49152b2e-0c39-470e-9b27-3f71e1f27da7"
 ---
 
 # Caclawphony -- openclaw/openclaw PR Pipeline
@@ -140,24 +181,24 @@ Determine **subsystem labels** from the files changed. Map to these label IDs:
 
 | Subsystem | Label ID | Heuristic (file paths) |
 |---|---|---|
-| gateway | `dc7faf59-f14a-4f03-a549-c0f7fa68ae91` | `src/gateway/`, gateway config |
-| channels | `69c1023d-c03f-41b6-a8ef-b4ec378c04d3` | `src/channels/`, telegram/discord/slack/etc |
-| browser | `4d8f75c4-2db0-4873-b078-9eb0882c97df` | `src/browser/`, playwright |
-| agents | `406758af-0b67-43d9-bb6a-a5440700f1ec` | `src/agents/`, agent config |
-| config | `ac615836-9150-42d9-a95f-28ade5a02175` | config schemas, settings |
-| cli | `904c5231-efcd-41c6-8b25-2cc54ec07154` | `src/cli/`, bin/ |
-| runtime | `e2a2870b-306c-4058-b5f3-0ebf8d84b792` | core runtime, process management |
-| auth | `34fc1c6d-e2e2-4ee9-8941-6e52ad1c6006` | auth, tokens, OAuth |
-| providers | `74bb9b68-aa94-4898-916b-a6a358b921a3` | `src/providers/`, LLM integrations |
-| docs | `49152b2e-2320-4a52-aa3e-902e08ac97bf` | `docs/`, README, markdown-only |
+| gateway | `{{ labels.subsystem.gateway }}` | `src/gateway/`, gateway config |
+| channels | `{{ labels.subsystem.channels }}` | `src/channels/`, telegram/discord/slack/etc |
+| browser | `{{ labels.subsystem.browser }}` | `src/browser/`, playwright |
+| agents | `{{ labels.subsystem.agents }}` | `src/agents/`, agent config |
+| config | `{{ labels.subsystem.config }}` | config schemas, settings |
+| cli | `{{ labels.subsystem.cli }}` | `src/cli/`, bin/ |
+| runtime | `{{ labels.subsystem.runtime }}` | core runtime, process management |
+| auth | `{{ labels.subsystem.auth }}` | auth, tokens, OAuth |
+| providers | `{{ labels.subsystem.providers }}` | `src/providers/`, LLM integrations |
+| docs | `{{ labels.subsystem.docs }}` | `docs/`, README, markdown-only |
 
 Recommendation labels (always apply exactly one):
 
 | Label | Label ID |
 |---|---|
-| review | `884ba56a-fb80-4c83-a35e-90ab4dbff32a` |
-| wait | `e2cfbdbb-4612-44dd-adb0-2a30b66657ef` |
-| skip | `8488053c-40a3-460a-8ee1-b7f93de9ebb7` |
+| review | `{{ labels.recommendation.review }}` |
+| wait | `{{ labels.recommendation.wait }}` |
+| skip | `{{ labels.recommendation.skip }}` |
 
 **Data gathering commands:**
 ```bash
@@ -183,21 +224,21 @@ mutation {
 **Step 2: Update the issue metadata in a single mutation (this MUST be last -- it triggers a state transition that ends your session):**
 
 1. **Title** -> `[RECOMMENDATION] PR #XXXX: <original title>`
-2. **State** -> Todo (`0772f6b2-85fa-4c21-ab14-6705687d475f`)
+2. **State** -> Todo (`{{ states.todo }}`)
 3. **Priority** -> integer from the table above
 4. **Estimate** -> Fibonacci complexity from the table above
 5. **Labels** -> one recommendation label + all matching subsystem labels (array of IDs)
-6. **Assignee** -> `5bbd2a49-0fde-4fdd-b265-f6991c718e87` (maintainer -- for human review gate)
+6. **Assignee** -> `{{ gates.review_complete.assignee }}` (maintainer -- for human review gate)
 
 ```graphql
 mutation {
   issueUpdate(id: "{{ issue.id }}", input: {
     title: "[REVIEW] PR #1234: fix streaming response"
-    stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f"
+    stateId: "{{ states.todo }}"
     priority: 2
     estimate: 3
-    labelIds: ["884ba56a-fb80-4c83-a35e-90ab4dbff32a", "dc7faf59-f14a-4f03-a549-c0f7fa68ae91"]
-    assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87"
+    labelIds: ["{{ labels.recommendation.review }}", "{{ labels.subsystem.gateway }}"]
+    assigneeId: "{{ gates.review_complete.assignee }}"
   }) { success }
 }
 ```
