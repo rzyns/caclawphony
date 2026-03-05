@@ -270,6 +270,82 @@ defmodule SymphonyElixir.CoreTest do
     end
   end
 
+  test "gate issue state triggers telegram notification and stops running agent" do
+    previous_token = System.get_env("TELEGRAM_BOT_TOKEN")
+    previous_chat_id = System.get_env("TELEGRAM_CHAT_ID")
+    on_exit(fn -> restore_env("TELEGRAM_BOT_TOKEN", previous_token) end)
+    on_exit(fn -> restore_env("TELEGRAM_CHAT_ID", previous_chat_id) end)
+    System.delete_env("TELEGRAM_BOT_TOKEN")
+    System.delete_env("TELEGRAM_CHAT_ID")
+
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-gate-reconcile-#{System.unique_integer([:positive])}"
+      )
+
+    issue_id = "issue-gate"
+    issue_identifier = "MT-557"
+    workspace = Path.join(test_root, issue_identifier)
+
+    try do
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: test_root,
+        tracker_active_states: ["Todo", "In Progress", "In Review"],
+        tracker_terminal_states: ["Closed", "Cancelled", "Canceled", "Duplicate"]
+      )
+
+      File.mkdir_p!(test_root)
+      File.mkdir_p!(workspace)
+
+      agent_pid =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      state = %Orchestrator.State{
+        running: %{
+          issue_id => %{
+            pid: agent_pid,
+            ref: nil,
+            identifier: issue_identifier,
+            issue: %Issue{id: issue_id, state: "Todo", identifier: issue_identifier},
+            started_at: DateTime.utc_now()
+          }
+        },
+        claimed: MapSet.new([issue_id]),
+        codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+        retry_attempts: %{}
+      }
+
+      issue = %Issue{
+        id: issue_id,
+        identifier: issue_identifier,
+        state: "Review Complete",
+        title: "Review done",
+        description: "Gate complete",
+        labels: []
+      }
+
+      log =
+        capture_log(fn ->
+          updated_state = Orchestrator.reconcile_issue_states_for_test([issue], state)
+          refute Map.has_key?(updated_state.running, issue_id)
+          refute MapSet.member?(updated_state.claimed, issue_id)
+          refute Process.alive?(agent_pid)
+          assert File.exists?(workspace)
+        end)
+
+      assert log =~ "Issue moved to non-active state"
+      assert log =~ "Telegram notification skipped"
+      assert log =~ "missing_telegram_bot_token"
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "terminal issue state stops running agent and cleans workspace" do
     test_root =
       Path.join(

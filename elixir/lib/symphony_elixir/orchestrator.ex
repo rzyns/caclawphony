@@ -7,11 +7,12 @@ defmodule SymphonyElixir.Orchestrator do
   require Logger
   import Bitwise, only: [<<<: 2]
 
-  alias SymphonyElixir.{AgentRunner, Config, StatusDashboard, Tracker}
+  alias SymphonyElixir.{AgentRunner, Config, Notifier, StatusDashboard, Tracker}
   alias SymphonyElixir.Linear.Issue
 
   @continuation_retry_delay_ms 1_000
   @failure_retry_base_ms 10_000
+  @gate_notification_states MapSet.new(["Review Complete", "Prepare Complete"])
   # Slightly above the dashboard render interval so "checking now…" can render.
   @poll_transition_render_delay_ms 20
   @empty_codex_totals %{
@@ -315,12 +316,22 @@ defmodule SymphonyElixir.Orchestrator do
 
       true ->
         Logger.info("Issue moved to non-active state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
+        notify_gate_state_transition(issue)
 
         terminate_running_issue(state, issue.id, false)
     end
   end
 
   defp reconcile_issue_state(_issue, state, _active_states, _terminal_states), do: state
+
+  defp notify_gate_state_transition(%Issue{} = issue) do
+    if gate_state_for_notification?(issue.state) do
+      Notifier.notify(issue.identifier, issue.state)
+    end
+  end
+
+  defp gate_state_for_notification?(state) when is_binary(state), do: MapSet.member?(@gate_notification_states, state)
+  defp gate_state_for_notification?(_state), do: false
 
   defp refresh_running_issue_state(%State{} = state, %Issue{} = issue) do
     case Map.get(state.running, issue.id) do
