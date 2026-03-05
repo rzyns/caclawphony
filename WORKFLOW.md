@@ -56,6 +56,8 @@ codex:
   turn_timeout_ms: 1800000
   stall_timeout_ms: 300000
   thread_sandbox: danger-full-access
+  turn_sandbox_policy:
+    type: dangerFullAccess
 ---
 
 # Caclawphony — openclaw/openclaw PR Pipeline
