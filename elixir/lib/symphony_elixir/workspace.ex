@@ -174,9 +174,17 @@ defmodule SymphonyElixir.Workspace do
 
     Logger.info("Running workspace hook hook=#{hook_name} #{issue_log_context(issue_context)} workspace=#{workspace}")
 
+    hook_env = [
+      {"SYMPHONY_ISSUE_ID", issue_context[:issue_id] || ""},
+      {"SYMPHONY_ISSUE_IDENTIFIER", issue_context[:issue_identifier] || ""},
+      {"SYMPHONY_ISSUE_TITLE", issue_context[:issue_title] || ""},
+      {"SYMPHONY_ISSUE_STATE", issue_context[:issue_state] || ""},
+      {"SYMPHONY_HOOK_NAME", hook_name}
+    ]
+
     task =
       Task.async(fn ->
-        System.cmd("sh", ["-lc", command], cd: workspace, stderr_to_stdout: true)
+        System.cmd("sh", ["-lc", command], cd: workspace, stderr_to_stdout: true, env: hook_env)
       end)
 
     case Task.yield(task, timeout_ms) do
@@ -261,24 +269,33 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp issue_context(%{id: issue_id, identifier: identifier}) do
+  defp issue_context(%{id: issue_id, identifier: identifier} = issue) do
     %{
       issue_id: issue_id,
-      issue_identifier: identifier || "issue"
+      issue_identifier: identifier || "issue",
+      issue_title: Map.get(issue, :title, ""),
+      issue_state: Map.get(issue, :state, ""),
+      issue_description: Map.get(issue, :description, "")
     }
   end
 
   defp issue_context(identifier) when is_binary(identifier) do
     %{
       issue_id: nil,
-      issue_identifier: identifier
+      issue_identifier: identifier,
+      issue_title: "",
+      issue_state: "",
+      issue_description: ""
     }
   end
 
   defp issue_context(_identifier) do
     %{
       issue_id: nil,
-      issue_identifier: "issue"
+      issue_identifier: "issue",
+      issue_title: "",
+      issue_state: "",
+      issue_description: ""
     }
   end
 
