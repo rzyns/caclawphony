@@ -3,7 +3,7 @@ tracker:
   kind: linear
   api_key: $LINEAR_API_KEY
   project_slug: d9873e6beee9
-  active_states: Review, Prepare, Merge
+  active_states: Backlog, Review, Prepare, Merge
   terminal_states: Done, Canceled, Duplicate
 
 polling:
@@ -14,6 +14,11 @@ workspace:
 
 hooks:
   after_create: |
+    # Backlog enrichment is lightweight — just needs gh CLI, no repo clone
+    if [ "$SYMPHONY_ISSUE_STATE" = "Backlog" ]; then
+      echo "Backlog enrichment — skipping repo clone"
+      exit 0
+    fi
     git clone /Users/phaedrus/Projects/openclaw . 2>/dev/null || true
     # Copy skill files into workspace (resolving symlinks from maintainers repo)
     SKILLS_SRC="/Users/phaedrus/Projects/maintainers/.agents/skills"
@@ -34,6 +39,8 @@ hooks:
       gh pr checkout "$PR_NUM" --force 2>/dev/null || git checkout main
     fi
   before_run: |
+    # Backlog enrichment doesn't need repo operations
+    [ "$SYMPHONY_ISSUE_STATE" = "Backlog" ] && exit 0
     # Ensure we're on the right branch and up to date
     PR_NUM=$(echo "$SYMPHONY_ISSUE_TITLE" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
     if [ -n "$PR_NUM" ]; then
@@ -75,7 +82,66 @@ Extract the PR number from the issue title (format: "PR #1234: title"). Use this
 
 ## Your Task
 
-{% if issue.state == "Review" %}
+{% if issue.state == "Backlog" %}
+### Triage / Enrichment Phase
+
+You are a PR triage agent for openclaw/openclaw. This issue contains a PR number or GitHub URL.
+Your job is to enrich it into a structured assessment that helps a maintainer decide whether to
+promote this PR to code review.
+
+Extract the PR number from the issue title or description (formats: "PR #1234: ...", "#1234",
+or a GitHub URL like "https://github.com/openclaw/openclaw/pull/1234").
+
+Gather data using `gh` CLI, then produce an assessment with the following sections:
+
+#### 1. Summary (2-3 sentences)
+What does this PR do? Restate in plain language — don't just copy the title.
+
+#### 2. Vital Signs
+- **Status:** Open / Draft / Closed / Merged
+- **CI:** ✅ Passing / ❌ Failing (list failed checks) / ⏳ Pending
+- **Mergeable:** Yes / Conflicts / Unknown
+- **Age:** Created X days ago, last updated Y days ago
+- **Author:** @username (association: member/contributor/first-timer, N total open PRs)
+
+#### 3. Scope
+- **Files changed:** N files, +X / -Y lines
+- **Subsystems touched:** (e.g., browser, agents, config, gateway, CLI, channels)
+- **Risk areas:** Flag if touching auth, migrations, core runtime, protocols
+
+#### 4. Change Quality Signals
+- Does the PR have tests?
+- Does it have a clear description or is it title-only?
+- Single focused change or multiple unrelated changes?
+- Any obvious code smells from the diff summary?
+
+#### 5. Related PRs
+Search for open PRs touching the same primary files or by the same author.
+Flag potential duplicates or conflicts.
+
+#### 6. Recommendation
+One of:
+- **REVIEW** — looks good, ready for code review
+- **WAIT** — has issues but worth watching (explain what)
+- **SKIP** — not worth reviewing right now (explain why)
+
+**Data gathering commands:**
+```bash
+gh pr view <PR> --repo openclaw/openclaw --json number,title,body,author,state,isDraft,createdAt,updatedAt,mergeable,files,additions,deletions,changedFiles,statusCheckRollup,reviews,authorAssociation,headRepository
+gh pr diff <PR> --repo openclaw/openclaw --stat
+gh pr checks <PR> --repo openclaw/openclaw
+gh search prs --repo openclaw/openclaw --state open -- "<search terms from changed files>"
+```
+
+**When finished:**
+1. Update this Linear issue: set the **title** to `[RECOMMENDATION] PR #XXXX: <original title>` (e.g., `[REVIEW] PR #1234: fix streaming response`)
+2. Post your full assessment as a **comment** on this Linear issue
+3. Transition this issue to **Todo**:
+```
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f" }) { success } }
+```
+
+{% elsif issue.state == "Review" %}
 ### Review Phase
 
 Read the skill file at `.agents/skills/review-pr/SKILL.md` and follow its instructions exactly.
