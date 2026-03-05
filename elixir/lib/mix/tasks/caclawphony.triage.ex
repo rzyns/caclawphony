@@ -23,7 +23,7 @@ defmodule Mix.Tasks.Caclawphony.Triage do
   """
 
   @backlog_state_id "33710d02-89f4-4a7b-8b0c-075250c19b3e"
-  @project_id "07919ebc-b0f1-4f43-b6ac-84b9f3a22a93"
+  @project_id "07919ebc-e133-4c0c-82b9-ead654ec06a2"
   @team_key "MAR"
 
   @team_query """
