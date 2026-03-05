@@ -119,11 +119,45 @@ What does this PR do? Restate in plain language — don't just copy the title.
 Search for open PRs touching the same primary files or by the same author.
 Flag potential duplicates or conflicts.
 
-#### 6. Recommendation
-One of:
-- **REVIEW** — looks good, ready for code review
-- **WAIT** — has issues but worth watching (explain what)
-- **SKIP** — not worth reviewing right now (explain why)
+#### 6. Recommendation & Metadata
+
+Determine a recommendation and priority:
+
+| Recommendation | When | Priority (Linear int) |
+|---|---|---|
+| **REVIEW** | Looks good, ready for code review | 2 (high) if <5 files and clean CI; 3 (medium) otherwise |
+| **WAIT** | Has issues but worth watching | 3 (medium) |
+| **SKIP** | Not worth reviewing right now | 4 (low) or 0 (none) for spam/stale |
+
+Determine an **estimate** (Fibonacci complexity):
+- **1** — trivial (typo, one-liner, docs-only)
+- **2** — small (single-file fix, <50 lines)
+- **3** — medium (multi-file, focused change)
+- **5** — large (new feature, cross-cutting)
+- **8** — very large (architectural, multi-subsystem)
+
+Determine **subsystem labels** from the files changed. Map to these label IDs:
+
+| Subsystem | Label ID | Heuristic (file paths) |
+|---|---|---|
+| gateway | `dc7faf59-f14a-4f03-a549-c0f7fa68ae91` | `src/gateway/`, gateway config |
+| channels | `69c1023d-c03f-41b6-a8ef-b4ec378c04d3` | `src/channels/`, telegram/discord/slack/etc |
+| browser | `4d8f75c4-2db0-4873-b078-9eb0882c97df` | `src/browser/`, playwright |
+| agents | `406758af-0b67-43d9-bb6a-a5440700f1ec` | `src/agents/`, agent config |
+| config | `ac615836-9150-42d9-a95f-28ade5a02175` | config schemas, settings |
+| cli | `904c5231-efcd-41c6-8b25-2cc54ec07154` | `src/cli/`, bin/ |
+| runtime | `e2a2870b-306c-4058-b5f3-0ebf8d84b792` | core runtime, process management |
+| auth | `34fc1c6d-e2e2-4ee9-8941-6e52ad1c6006` | auth, tokens, OAuth |
+| providers | `74bb9b68-aa94-4898-916b-a6a358b921a3` | `src/providers/`, LLM integrations |
+| docs | `49152b2e-2320-4a52-aa3e-902e08ac97bf` | `docs/`, README, markdown-only |
+
+Recommendation labels (always apply exactly one):
+
+| Label | Label ID |
+|---|---|
+| review | `884ba56a-fb80-4c83-a35e-90ab4dbff32a` |
+| wait | `e2cfbdbb-4612-44dd-adb0-2a30b66657ef` |
+| skip | `8488053c-40a3-460a-8ee1-b7f93de9ebb7` |
 
 **Data gathering commands:**
 ```bash
@@ -133,13 +167,29 @@ gh pr checks <PR> --repo openclaw/openclaw
 gh search prs --repo openclaw/openclaw --state open -- "<search terms from changed files>"
 ```
 
-**When finished:**
-1. Update this Linear issue: set the **title** to `[RECOMMENDATION] PR #XXXX: <original title>` (e.g., `[REVIEW] PR #1234: fix streaming response`)
-2. Post your full assessment as a **comment** on this Linear issue
-3. Transition this issue to **Todo**:
+**When finished**, update this Linear issue in a single mutation with ALL of the following:
+
+1. **Title** → `[RECOMMENDATION] PR #XXXX: <original title>`
+2. **State** → Todo (`0772f6b2-85fa-4c21-ab14-6705687d475f`)
+3. **Priority** → integer from the table above
+4. **Estimate** → Fibonacci complexity from the table above
+5. **Labels** → one recommendation label + all matching subsystem labels (array of IDs)
+6. **Assignee** → `5bbd2a49-0fde-4fdd-b265-f6991c718e87` (maintainer — for human review gate)
+
+```graphql
+mutation {
+  issueUpdate(id: "{{ issue.id }}", input: {
+    title: "[REVIEW] PR #1234: fix streaming response"
+    stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f"
+    priority: 2
+    estimate: 3
+    labelIds: ["884ba56a-fb80-4c83-a35e-90ab4dbff32a", "dc7faf59-f14a-4f03-a549-c0f7fa68ae91"]
+    assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87"
+  }) { success }
+}
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f" }) { success } }
-```
+
+Also post your full assessment as a **comment** on this Linear issue.
 
 {% elsif issue.state == "Review" %}
 ### Review Phase
@@ -153,9 +203,9 @@ Do NOT comment on the PR on GitHub. Do NOT push any changes. This is a read-only
 - A concise summary of findings (severity + title for each)
 - Key concerns or blockers
 
-Then transition this issue to **Review Complete**:
+Then transition this issue to **Review Complete** and assign to the maintainer for decision:
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48a0-9466-c38eef79aded" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48a0-9466-c38eef79aded", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87" }) { success } }
 ```
 
 {% elsif issue.state == "Prepare" %}
@@ -170,9 +220,9 @@ The `.local/review.md` and `.local/review.json` from the review phase should alr
 - Gate results (pass/fail)
 - Push status
 
-Then transition this issue to **Prepare Complete**:
+Then transition this issue to **Prepare Complete** and assign to the maintainer for merge decision:
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87" }) { success } }
 ```
 
 {% elsif issue.state == "Merge" %}

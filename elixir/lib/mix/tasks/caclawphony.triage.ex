@@ -13,7 +13,13 @@ defmodule Mix.Tasks.Caclawphony.Triage do
   Usage:
 
       mix caclawphony.triage 35628 35714
+      mix caclawphony.triage --priority 2 35628
       mix caclawphony.triage --help
+
+  Options:
+
+      --priority N   Set initial priority (0=none, 1=urgent, 2=high, 3=medium, 4=low)
+                     Default: none (enrichment agent will set it)
   """
 
   @backlog_state_id "33710d02-89f4-4a7b-8b0c-075250c19b3e"
@@ -40,7 +46,10 @@ defmodule Mix.Tasks.Caclawphony.Triage do
   @impl Mix.Task
   def run(args) do
     {opts, pr_args, invalid} =
-      OptionParser.parse(args, strict: [help: :boolean], aliases: [h: :help])
+      OptionParser.parse(args,
+        strict: [help: :boolean, priority: :integer],
+        aliases: [h: :help, p: :priority]
+      )
 
     cond do
       opts[:help] ->
@@ -55,6 +64,12 @@ defmodule Mix.Tasks.Caclawphony.Triage do
       true ->
         Mix.Task.run("app.start")
 
+        priority = opts[:priority]
+
+        if priority && priority not in 0..4 do
+          Mix.raise("Priority must be 0-4 (got #{priority})")
+        end
+
         pr_numbers = Enum.map(pr_args, &parse_pr_number!/1)
         team_id = fetch_team_id!(@team_key)
 
@@ -68,7 +83,8 @@ defmodule Mix.Tasks.Caclawphony.Triage do
               description: "#{pr_url}",
               team_id: team_id,
               state_id: @backlog_state_id,
-              project_id: @project_id
+              project_id: @project_id,
+              priority: priority
             })
 
           Mix.shell().info(
@@ -120,18 +136,20 @@ defmodule Mix.Tasks.Caclawphony.Triage do
   end
 
   defp create_backlog_issue!(attrs) do
+    input =
+      %{
+        title: attrs.title,
+        description: attrs.description,
+        teamId: attrs.team_id,
+        stateId: attrs.state_id,
+        projectId: attrs.project_id
+      }
+      |> maybe_put(:priority, attrs[:priority])
+
     body =
       graphql_or_raise!(
         @issue_create_mutation,
-        %{
-          input: %{
-            title: attrs.title,
-            description: attrs.description,
-            teamId: attrs.team_id,
-            stateId: attrs.state_id,
-            projectId: attrs.project_id
-          }
-        },
+        %{input: input},
         operation_name: "CreateIssue"
       )
 
@@ -151,6 +169,9 @@ defmodule Mix.Tasks.Caclawphony.Triage do
         issue_create["issue"]
     end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp graphql_or_raise!(query, variables, opts) do
     case Client.graphql(query, variables, opts) do
