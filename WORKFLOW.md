@@ -15,6 +15,19 @@ workspace:
 hooks:
   after_create: |
     git clone /Users/phaedrus/Projects/openclaw . 2>/dev/null || true
+    # Copy skill files into workspace (resolving symlinks from maintainers repo)
+    SKILLS_SRC="/Users/phaedrus/Projects/maintainers/.agents/skills"
+    SKILLS_DST=".agents/skills"
+    if [ -d "$SKILLS_SRC" ]; then
+      mkdir -p "$SKILLS_DST"
+      for skill in review-pr prepare-pr merge-pr pr-cluster; do
+        if [ -d "$SKILLS_SRC/$skill" ]; then
+          cp -RL "$SKILLS_SRC/$skill" "$SKILLS_DST/" 2>/dev/null || true
+        fi
+      done
+      # Copy PR_WORKFLOW.md if present
+      [ -f "$SKILLS_SRC/PR_WORKFLOW.md" ] && cp "$SKILLS_SRC/PR_WORKFLOW.md" "$SKILLS_DST/" 2>/dev/null || true
+    fi
     # Extract PR number from issue title (format: "PR #1234: title" or "#1234")
     PR_NUM=$(echo "$SYMPHONY_ISSUE_TITLE" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
     if [ -n "$PR_NUM" ]; then
@@ -61,78 +74,11 @@ Extract the PR number from the issue title (format: "PR #1234: title"). Use this
 ## Your Task
 
 {% if issue.state == "Review" %}
-### Review Phase — Read-Only PR Analysis
+### Review Phase
 
-Perform a read-only review and produce both human and machine-readable outputs.
+Read the skill file at `.agents/skills/review-pr/SKILL.md` and follow its instructions exactly.
 
-**Safety:** Never push, merge, or modify code. Work only in the PR worktree.
-
-**Steps:**
-
-1. **Setup and metadata**
-```sh
-scripts/pr-review <PR>
-ls -la .local/pr-meta.json .local/pr-meta.env .local/review-context.env .local/review-mode.env
-```
-
-2. **Check existing implementation on main**
-```sh
-scripts/pr review-checkout-main <PR>
-# Search for relevant patterns in the codebase
-rg -n "<keyword>" -S src extensions apps || true
-```
-
-3. **Read PR description and diff**
-```sh
-scripts/pr review-checkout-pr <PR>
-gh pr diff <PR>
-source .local/review-context.env
-git diff --stat "$MERGE_BASE"..pr-<PR>
-git diff "$MERGE_BASE"..pr-<PR>
-```
-
-4. **Optional: run targeted tests**
-```sh
-scripts/pr review-tests <PR> <test-file> [<test-file> ...]
-```
-
-5. **Initialize review artifact templates**
-```sh
-scripts/pr review-artifacts-init <PR>
-```
-
-6. **Produce review outputs**
-
-Fill `.local/review.md` with sections A through J:
-- A) TL;DR recommendation
-- B) What changed and what is good
-- C) Security findings
-- D) PR intent and optimality assessment
-- E) Concerns or questions (actionable)
-- F) Tests (ran, gaps, results)
-- G) Docs status
-- H) Changelog status
-- I) Follow-ups (optional)
-- J) Suggested PR comment (optional)
-
-Fill `.local/review.json` with this minimum shape:
-```json
-{
-  "recommendation": "READY FOR /prepare-pr",
-  "findings": [
-    { "id": "F1", "severity": "IMPORTANT", "title": "...", "area": "path/or/component", "fix": "Actionable fix" }
-  ],
-  "tests": { "ran": [], "gaps": [], "result": "pass" },
-  "docs": "up_to_date|missing|not_applicable",
-  "changelog": "required"
-}
-```
-
-7. **Guard + validate**
-```sh
-scripts/pr review-guard <PR>
-scripts/pr review-validate-artifacts <PR>
-```
+Do NOT comment on the PR. Do NOT push any changes. This is a read-only review.
 
 **When finished**, transition this issue to **Review Complete**:
 ```
@@ -140,50 +86,11 @@ mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48
 ```
 
 {% elsif issue.state == "Prepare" %}
-### Prepare Phase — Fix Findings, Gate, Push
+### Prepare Phase
 
-Prepare the PR head branch for merge after review. The `.local/review.md` and `.local/review.json` from the review phase should be in this workspace.
+Read the skill file at `.agents/skills/prepare-pr/SKILL.md` and follow its instructions exactly.
 
-**Safety:** Never push to `main`. Only push to PR head with `--force-with-lease`. Never run `git clean -fdx`.
-
-**Steps:**
-
-1. **Setup and verify artifacts**
-```sh
-scripts/pr-prepare init <PR>
-ls -la .local/review.md .local/review.json .local/pr-meta.env .local/prep-context.env
-jq . .local/review.json >/dev/null
-```
-
-2. **Resolve required findings**
-```sh
-jq -r '.findings[] | select(.severity=="BLOCKER" or .severity=="IMPORTANT") | "- [\(.severity)] \(.id): \(.title) => \(.fix)"' .local/review.json
-```
-Fix all BLOCKER and IMPORTANT findings. Keep scope tight.
-
-3. **Update changelog/docs**
-- `CHANGELOG.md` must include a newly added entry
-- When PR author metadata is available, the entry must include `(#<PR>) thanks @<pr-author>`
-
-4. **Commit scoped changes** (concise subjects, no PR numbers — those go in the final squash commit)
-```sh
-scripts/committer "fix: <summary>" <file1> <file2> ...
-```
-
-5. **Run gates**
-```sh
-scripts/pr-prepare gates <PR>
-```
-
-6. **Push safely to PR head**
-```sh
-scripts/pr-prepare push <PR>
-```
-
-7. **Verify handoff artifacts**
-```sh
-ls -la .local/prep.md .local/prep.env
-```
+The `.local/review.md` and `.local/review.json` from the review phase should already be in this workspace.
 
 **When finished**, transition this issue to **Prepare Complete**:
 ```
@@ -191,39 +98,9 @@ mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-42
 ```
 
 {% elsif issue.state == "Merge" %}
-### Merge Phase — Deterministic Squash Merge
+### Merge Phase
 
-Merge a prepared PR after deterministic validation.
-
-**Safety:** Never use `gh pr merge --auto`. Never run `git push` directly. Always use `--match-head-commit`.
-
-**Steps:**
-
-1. **Validate artifacts exist**
-```sh
-for f in .local/review.md .local/review.json .local/prep.md .local/prep.env; do
-  [ -s "$f" ] || { echo "Missing artifact: $f"; exit 1; }
-done
-```
-
-2. **Validate checks and branch status**
-```sh
-scripts/pr-merge verify <PR>
-source .local/prep.env
-```
-
-3. **Merge deterministically**
-```sh
-scripts/pr-merge run <PR>
-```
-
-This performs: squash merge pinned to `PREP_HEAD_SHA`, reviewer merge author email, co-author trailers for PR author and reviewer, post-merge verification, PR comment with merge details, cleanup after confirmed MERGED.
-
-4. **Report these values** in a human-readable summary:
-- Merge commit SHA
-- Merge author email
-- Merge completion comment URL
-- PR URL
+Read the skill file at `.agents/skills/merge-pr/SKILL.md` and follow its instructions exactly.
 
 **When finished**, transition this issue to **Done**:
 ```
@@ -237,4 +114,3 @@ mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "e085693d-8142-46
 - **Never comment on the PR on GitHub** — no PR comments, no review submissions
 - **Never delete the worktree** — it persists across pipeline stages
 - If you encounter an error you can't resolve, leave a comment on the Linear issue explaining what went wrong
-- Use merge-base scoped diffs for local context to avoid stale branch drift
