@@ -31,7 +31,7 @@ defmodule SymphonyElixir.LogFile do
 
   defp setup_disk_handler(log_file, max_bytes, max_files) do
     expanded_path = Path.expand(log_file)
-    :ok = File.mkdir_p(Path.dirname(expanded_path))
+    File.mkdir_p!(Path.dirname(expanded_path))
     :ok = remove_existing_handler()
 
     case :logger.add_handler(
