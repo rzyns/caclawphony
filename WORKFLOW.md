@@ -80,9 +80,14 @@ Extract the PR number from the issue title (format: "PR #1234: title"). Use this
 
 Read the skill file at `.agents/skills/review-pr/SKILL.md` and follow its instructions exactly.
 
-Do NOT comment on the PR. Do NOT push any changes. This is a read-only review.
+Do NOT comment on the PR on GitHub. Do NOT push any changes. This is a read-only review.
 
-**When finished**, transition this issue to **Review Complete**:
+**When finished**, post a summary comment on this Linear issue with:
+- The recommendation from `.local/review.json`
+- A concise summary of findings (severity + title for each)
+- Key concerns or blockers
+
+Then transition this issue to **Review Complete**:
 ```
 mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48a0-9466-c38eef79aded" }) { success } }
 ```
@@ -94,7 +99,12 @@ Read the skill file at `.agents/skills/prepare-pr/SKILL.md` and follow its instr
 
 The `.local/review.md` and `.local/review.json` from the review phase should already be in this workspace.
 
-**When finished**, transition this issue to **Prepare Complete**:
+**When finished**, post a summary comment on this Linear issue with:
+- What findings were fixed
+- Gate results (pass/fail)
+- Push status
+
+Then transition this issue to **Prepare Complete**:
 ```
 mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9" }) { success } }
 ```
@@ -104,7 +114,12 @@ mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-42
 
 Read the skill file at `.agents/skills/merge-pr/SKILL.md` and follow its instructions exactly.
 
-**When finished**, transition this issue to **Done**:
+**When finished**, post a summary comment on this Linear issue with:
+- Merge commit SHA
+- PR URL
+- Any cleanup performed
+
+Then transition this issue to **Done**:
 ```
 mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "e085693d-8142-4671-9de5-20286fae8ec6" }) { success } }
 ```
