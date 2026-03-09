@@ -477,12 +477,78 @@ Read the skill file at `.agents/skills/prepare-pr/SKILL.md` and follow its instr
 
 The `.local/review.md` and `.local/review.json` from the review phase should already be in this workspace.
 
+#### Generate Live Test Plan
+
+After fixes and gates pass, generate a test plan in `.local/test-plan.md` that a maintainer agent can execute on a live OpenClaw instance to validate the PR before merge.
+
+**Analyze the PR diff** and produce the following sections:
+
+```markdown
+# Test Plan: PR #XXXX — <title>
+
+## Risk Tier
+
+Classify as one of:
+- **GREEN** — Safe to test on production instance. Config changes, new tool params, error messages, docs, logging, non-breaking additions.
+- **YELLOW** — Test with caution. Auth changes, model routing, compaction, session management. Have rollback ready.
+- **RED** — Needs isolated instance or manual testing. Breaking changes, data migrations, protocol changes, core runtime rewrites.
+
+## What Changed (test-relevant summary)
+- <bullet list of functional changes that have observable behavior>
+
+## Test Steps
+
+For each testable change, provide a concrete verification step. Use commands available to an OpenClaw agent:
+
+### Test 1: <description>
+**What:** <what behavior to verify>
+**How:**
+```bash
+<exact command to run — openclaw CLI, exec, gateway config.patch, curl, etc.>
+```
+**Expected:** <what success looks like>
+**Rollback:** <how to undo if something breaks>
+
+### Test 2: ...
+
+## Untestable Changes
+- <list anything that can't be verified on a live instance and why>
+  - Channel-specific (requires Feishu/Slack/etc. configured)
+  - UI/TUI only (requires interactive terminal)
+  - Race condition / timing dependent
+  - Requires specific provider account
+
+## Pre-test Checklist
+- [ ] Current instance is on main (clean baseline)
+- [ ] Build PR branch: `cd ~/Projects/clawdbot && git fetch origin pull/XXXX/head:test-XXXX && git checkout test-XXXX && pnpm build`
+- [ ] Restart gateway on PR branch
+- [ ] Run test steps above
+- [ ] After testing: `git checkout main && pnpm build` + restart gateway
+
+## Rollback
+If anything goes wrong during testing:
+```bash
+cd ~/Projects/clawdbot && git checkout main && pnpm build
+openclaw gateway restart
+```
+```
+
+**Guidelines for test steps:**
+- Prefer `openclaw` CLI commands and `gateway config.patch` over manual file edits
+- For tool changes: construct a message that would trigger the tool, verify the response
+- For error handling: trigger the error condition, verify the new behavior
+- For config changes: patch the config, verify the setting takes effect
+- Be specific — "verify it works" is not a test step; "run `openclaw status` and confirm X field shows Y" is
+- Each test should be independently executable (no ordering dependencies where possible)
+- Include `gateway restart` after config changes that require it
+
 **When finished**, do these steps IN THIS ORDER (comment first, state transition last):
 
 1. **Post a summary comment** on this Linear issue with:
    - What findings were fixed
    - Gate results (pass/fail)
    - Push status
+   - Test plan risk tier and summary (e.g., "GREEN — 3 test steps, all CLI-verifiable")
 
 2. **Then transition this issue** to Prepare Complete (this MUST be last -- it ends your session):
 ```
