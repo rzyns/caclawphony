@@ -664,12 +664,12 @@ git rebase origin/main
 - **Mechanical conflicts** (import ordering, adjacent-line edits, CHANGELOG.md collisions, lockfile regeneration): resolve automatically, `git add` the resolved files, `git rebase --continue`.
 - **Semantic conflicts** (both sides changed the same logic, function signatures changed, structural rewrites): do NOT guess. Abort the rebase (`git rebase --abort`) and report the conflicts in detail.
 
-If you resolved conflicts, verify the result compiles:
+If you resolved conflicts, optionally check if the result compiles:
 ```bash
 pnpm build 2>&1 | tail -20
 ```
 
-If build fails after conflict resolution, abort and report.
+**Important:** If build fails, DO NOT abort the rebase. The rebase was likely correct -- build failures after rebase usually indicate mainline API drift (changed function signatures, moved exports, etc.), not bad conflict resolution. These are problems for the Prepare phase to fix, not Rebase. Always proceed to Step 4 (force push) regardless of build outcome. Note any build failures in your report.
 
 #### Step 4: Force push
 
