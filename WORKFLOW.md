@@ -136,6 +136,14 @@ labels:
     auth: "34fc1c6d-e47a-4e3e-9a51-b9cdade2f5d9"
     providers: "74bb9b68-bd9b-4c88-b5c2-56ec3b0a4bde"
     docs: "49152b2e-0c39-470e-9b27-3f71e1f27da7"
+  activity:
+    triaging: "aad55766-f201-4988-b430-30be21d9f94a"
+    reviewing: "05a165c6-2b8c-4090-a886-ff3c378c37cc"
+    preparing: "86496a8c-f3f0-4b89-9d1d-b0cd3389c8c6"
+    merging: "efc416d9-fce7-4a88-8f3d-84e46e1410bf"
+    rebasing: "5860c502-78fd-4122-948a-144b1fe012cc"
+    testing: "1580f3b6-a1e6-4365-b012-b4c901258b36"
+    closing: "3f58a85b-ebb1-4596-b9b5-5238432aa117"
 ---
 
 # Caclawphony -- openclaw/openclaw PR Pipeline
@@ -150,6 +158,40 @@ You are a maintainer agent working on the openclaw/openclaw repository.
 {% if attempt %}- **Attempt:** {{ attempt }}{% endif %}
 
 Extract the PR number from the issue title (format: "PR #1234: title"). Use this PR number throughout.
+
+## Activity Label
+
+**Immediately** — before doing anything else — apply your phase's activity label:
+
+{% if issue.state == "Triage" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.triaging }}"] }) { success } }
+```
+{% elsif issue.state == "Review" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.reviewing }}"] }) { success } }
+```
+{% elsif issue.state == "Prepare" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.preparing }}"] }) { success } }
+```
+{% elsif issue.state == "Test" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.testing }}"] }) { success } }
+```
+{% elsif issue.state == "Merge" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.merging }}"] }) { success } }
+```
+{% elsif issue.state == "Rebase" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.rebasing }}"] }) { success } }
+```
+{% elsif issue.state == "Closure" or issue.state == "Request Changes" %}
+```graphql
+mutation { issueUpdate(id: "{{ issue.id }}", input: { addedLabelIds: ["{{ labels.activity.closing }}"] }) { success } }
+```
+{% endif %}
 
 ## Your Task
 
@@ -387,6 +429,7 @@ gh pr view <N> --repo openclaw/openclaw --json number,title,state,createdAt,upda
      issueUpdate(id: "{{ issue.id }}", input: {
        title: "[#XXXX] <this PR's title>"
        stateId: "{{ states.duplicate }}"
+       removedLabelIds: ["{{ labels.activity.triaging }}"]
      }) { success }
    }
    ```
@@ -443,6 +486,7 @@ mutation {
     priority: 2
     estimate: 3
     labelIds: ["{{ labels.recommendation.review }}", "{{ labels.subsystem.gateway }}"]
+    removedLabelIds: ["{{ labels.activity.triaging }}"]
     assigneeId: "{{ gates.review_complete.assignee }}"
   }) { success }
 }
@@ -470,7 +514,7 @@ Do NOT comment on the PR on GitHub. Do NOT push any changes. This is a read-only
 
 2. **Then transition this issue** to Review Complete (this MUST be last -- it ends your session):
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48a0-9466-c38eef79aded", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "4f363475-bf45-48a0-9466-c38eef79aded", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87", removedLabelIds: ["{{ labels.activity.reviewing }}"] }) { success } }
 ```
 
 {% elsif issue.state == "Prepare" %}
@@ -495,7 +539,7 @@ The `.local/review.md` and `.local/review.json` from the review phase should alr
 
 2. **Then transition this issue** to Prepare Complete (this MUST be last -- it ends your session):
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0671e7cc-46b5-424e-aed3-d9408c9d3eb9", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87", removedLabelIds: ["{{ labels.activity.preparing }}"] }) { success } }
 ```
 
 {% elsif issue.state == "Test" %}
@@ -565,7 +609,7 @@ Create `.local/test-report.md` with:
 1. Post a summary comment on this Linear issue with the test report.
 2. Transition to Pre-merge (human gate):
 ```graphql
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.pre_merge }}", assigneeId: "{{ gates.pre_merge.assignee }}" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.pre_merge }}", assigneeId: "{{ gates.pre_merge.assignee }}", removedLabelIds: ["{{ labels.activity.testing }}"] }) { success } }
 ```
 
 **If tests FAIL** (PR-introduced failures):
@@ -573,7 +617,7 @@ mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.pre_me
 1. Post a detailed failure comment on this Linear issue with failing tests, stack traces, and analysis.
 2. Move back to Prepare for fixes:
 ```graphql
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.prepare }}" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.prepare }}", removedLabelIds: ["{{ labels.activity.testing }}"] }) { success } }
 ```
 
 {% elsif issue.state == "Merge" %}
@@ -586,7 +630,7 @@ Read the skill file at `.agents/skills/merge-pr/SKILL.md` and follow its instruc
 1. **Post a comment** on this Linear issue explaining what failed and why (include the error output).
 2. **Move the issue back to Prepare** so the PR gets rebased and re-gated:
 ```graphql
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "42036e0f-29e1-4ece-9ab7-6dd0de1783f8" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "42036e0f-29e1-4ece-9ab7-6dd0de1783f8", removedLabelIds: ["{{ labels.activity.merging }}"] }) { success } }
 ```
 Do NOT retry the merge yourself. Stop after the state transition.
 
@@ -630,7 +674,7 @@ mutation {
 
 2. **Then transition this issue** to Done (this MUST be last -- it ends your session):
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "e085693d-8142-4671-9de5-20286fae8ec6" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "e085693d-8142-4671-9de5-20286fae8ec6", removedLabelIds: ["{{ labels.activity.merging }}"] }) { success } }
 ```
 
 {% elsif issue.state == "Rebase" %}
@@ -697,7 +741,7 @@ gh api graphql -f query="mutation { updateRef(input: { refId: \"refs/heads/$BRAN
 
 2. **Then transition this issue** to Todo (this MUST be last -- it ends your session):
 ```
-mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87" }) { success } }
+mutation { issueUpdate(id: "{{ issue.id }}", input: { stateId: "0772f6b2-85fa-4c21-ab14-6705687d475f", assigneeId: "5bbd2a49-0fde-4fdd-b265-f6991c718e87", removedLabelIds: ["{{ labels.activity.rebasing }}"] }) { success } }
 ```
 
 {% elsif issue.state == "Closure" %}
@@ -752,7 +796,7 @@ gh pr close <PR> --repo openclaw/openclaw
 2. Then transition this issue to Done (this MUST be last — it ends your session):
 ```graphql
 mutation {
-  issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.done }}" }) {
+  issueUpdate(id: "{{ issue.id }}", input: { stateId: "{{ states.done }}", removedLabelIds: ["{{ labels.activity.closing }}"] }) {
     success
   }
 }
@@ -814,6 +858,7 @@ gh pr review <PR> --repo openclaw/openclaw --request-changes --body "<review com
 mutation {
   issueUpdate(id: "{{ issue.id }}", input: {
     stateId: "{{ states.backlog }}"
+    removedLabelIds: ["{{ labels.activity.closing }}"]
   }) { success }
 }
 ```
