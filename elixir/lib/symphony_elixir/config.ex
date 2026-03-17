@@ -68,6 +68,7 @@ defmodule SymphonyElixir.Config do
     }
   }
   @default_codex_command "codex app-server"
+  @default_codex_protocol "codex"
   @default_codex_turn_timeout_ms 3_600_000
   @default_codex_read_timeout_ms 5_000
   @default_codex_stall_timeout_ms 300_000
@@ -152,6 +153,7 @@ defmodule SymphonyElixir.Config do
                                default: %{},
                                keys: [
                                  command: [type: :string, default: @default_codex_command],
+                                 protocol: [type: :string, default: @default_codex_protocol],
                                  turn_timeout_ms: [
                                    type: :integer,
                                    default: @default_codex_turn_timeout_ms
@@ -424,6 +426,11 @@ defmodule SymphonyElixir.Config do
   @spec codex_command() :: String.t()
   def codex_command do
     get_in(validated_workflow_options(), [:codex, :command])
+  end
+
+  @spec codex_protocol() :: String.t()
+  def codex_protocol do
+    get_in(validated_workflow_options(), [:codex, :protocol])
   end
 
   @spec codex_turn_timeout_ms() :: pos_integer()
@@ -744,6 +751,7 @@ defmodule SymphonyElixir.Config do
   defp extract_codex_options(section) do
     %{}
     |> put_if_present(:command, command_value(Map.get(section, "command")))
+    |> put_if_present(:protocol, scalar_string_value(Map.get(section, "protocol")))
     |> put_if_present(:turn_timeout_ms, integer_value(Map.get(section, "turn_timeout_ms")))
     |> put_if_present(:read_timeout_ms, integer_value(Map.get(section, "read_timeout_ms")))
     |> put_if_present(:stall_timeout_ms, integer_value(Map.get(section, "stall_timeout_ms")))

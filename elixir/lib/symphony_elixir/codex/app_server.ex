@@ -193,6 +193,8 @@ defmodule SymphonyElixir.Codex.AppServer do
   end
 
   defp send_initialize(port) do
+    client_info_key = if claude_protocol?(), do: "client", else: "clientInfo"
+
     payload = %{
       "method" => "initialize",
       "id" => @initialize_id,
@@ -200,7 +202,7 @@ defmodule SymphonyElixir.Codex.AppServer do
         "capabilities" => %{
           "experimentalApi" => true
         },
-        "clientInfo" => %{
+        client_info_key => %{
           "name" => "symphony-orchestrator",
           "title" => "Symphony Orchestrator",
           "version" => "0.1.0"
@@ -228,53 +230,83 @@ defmodule SymphonyElixir.Codex.AppServer do
   end
 
   defp start_thread(port, workspace, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}) do
+    params =
+      if claude_protocol?() do
+        %{
+          "cwd" => Path.expand(workspace),
+          "permission_mode" => approval_policy_to_permission_mode(approval_policy)
+        }
+      else
+        %{
+          "approvalPolicy" => approval_policy,
+          "sandbox" => thread_sandbox,
+          "cwd" => Path.expand(workspace),
+          "dynamicTools" => DynamicTool.tool_specs()
+        }
+      end
+
     send_message(port, %{
       "method" => "thread/start",
       "id" => @thread_start_id,
-      "params" => %{
-        "approvalPolicy" => approval_policy,
-        "sandbox" => thread_sandbox,
-        "cwd" => Path.expand(workspace),
-        "dynamicTools" => DynamicTool.tool_specs()
-      }
+      "params" => params
     })
 
     case await_response(port, @thread_start_id) do
-      {:ok, %{"thread" => thread_payload}} ->
-        case thread_payload do
-          %{"id" => thread_id} -> {:ok, thread_id}
-          _ -> {:error, {:invalid_thread_payload, thread_payload}}
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
-    send_message(port, %{
-      "method" => "turn/start",
-      "id" => @turn_start_id,
-      "params" => %{
-        "threadId" => thread_id,
-        "input" => [
-          %{
-            "type" => "text",
-            "text" => prompt
-          }
-        ],
-        "cwd" => Path.expand(workspace),
-        "title" => "#{issue.identifier}: #{issue.title}",
-        "approvalPolicy" => approval_policy,
-        "sandboxPolicy" => turn_sandbox_policy
-      }
-    })
-
-    case await_response(port, @turn_start_id) do
-      {:ok, %{"turn" => %{"id" => turn_id}}} -> {:ok, turn_id}
+      {:ok, result} -> extract_thread_id(result)
       other -> other
     end
   end
+
+  defp extract_thread_id(%{"thread" => %{"id" => thread_id}}), do: {:ok, thread_id}
+  defp extract_thread_id(%{"thread_id" => thread_id}) when is_binary(thread_id), do: {:ok, thread_id}
+  defp extract_thread_id(other), do: {:error, {:invalid_thread_payload, other}}
+
+  defp approval_policy_to_permission_mode("never"), do: "bypassPermissions"
+  defp approval_policy_to_permission_mode("on-failure"), do: "acceptEdits"
+  defp approval_policy_to_permission_mode("on-request"), do: "default"
+  defp approval_policy_to_permission_mode(_), do: "default"
+
+  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
+    params =
+      if claude_protocol?() do
+        %{
+          "thread_id" => thread_id,
+          "content" => prompt,
+          "cwd" => Path.expand(workspace)
+        }
+      else
+        %{
+          "threadId" => thread_id,
+          "input" => [
+            %{
+              "type" => "text",
+              "text" => prompt
+            }
+          ],
+          "cwd" => Path.expand(workspace),
+          "title" => "#{issue.identifier}: #{issue.title}",
+          "approvalPolicy" => approval_policy,
+          "sandboxPolicy" => turn_sandbox_policy
+        }
+      end
+
+    send_message(port, %{
+      "method" => "turn/start",
+      "id" => @turn_start_id,
+      "params" => params
+    })
+
+    case await_response(port, @turn_start_id) do
+      {:ok, result} -> extract_turn_id(result)
+      other -> other
+    end
+  end
+
+  defp extract_turn_id(%{"turn" => %{"id" => turn_id}}), do: {:ok, turn_id}
+  defp extract_turn_id(%{"turn_id" => turn_id}) when is_binary(turn_id), do: {:ok, turn_id}
+  defp extract_turn_id(other), do: {:error, {:invalid_turn_payload, other}}
+
+  defp claude_protocol?(), do: Config.codex_protocol() == "claude"
 
   defp await_turn_completion(port, on_message, tool_executor, auto_approve_requests) do
     receive_loop(port, on_message, Config.codex_turn_timeout_ms(), "", tool_executor, auto_approve_requests)
