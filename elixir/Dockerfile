@@ -1,6 +1,6 @@
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 # Build the symphony escript on an Erlang/Elixir base.
-FROM hexpm/elixir:1.19.5-erlang-28.3-debian-bookworm-20250317-slim AS builder
+FROM hexpm/elixir:1.19.5-erlang-28.2-debian-bookworm-20260316-slim AS builder
 
 WORKDIR /app
 
