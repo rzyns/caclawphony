@@ -66,7 +66,8 @@ agent:
     test: 1
 
 codex:
-  command: codex app-server
+  command: claude-app-server
+  protocol: claude
   approval_policy: never
   read_timeout_ms: 30000
   turn_timeout_ms: 1800000
@@ -147,10 +148,16 @@ labels:
 
 You are a maintainer agent working on the openclaw/openclaw repository.
 
+## Environment
+
+- `PLANE_API_KEY` — set in the symphony process environment; available in all bash commands
+- `MAINTAINERS_REPO` — path to the maintainers repo with agent skills
+- `OPENCLAW_REPO` — path to the openclaw repo (used in hooks for git clone)
+
 ## Plane API Helper
 
-All tracker operations use the `plane_rest` tool. The project path prefix is:
-`/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db`
+All tracker operations use `curl` with `$PLANE_API_KEY`. The base URL is:
+`https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db`
 
 Assignee for gate states (Janusz): `a528ab36-d423-4f64-be85-f7ddfeaebab1`
 
@@ -168,32 +175,60 @@ Extract the PR number from the issue title (format: "PR #1234: title"). Use this
 **Immediately** — before doing anything else — apply your phase's activity label:
 
 {% if issue.state == "PR Triage" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["672a68c1-bf63-45c8-80c9-5c89232ab095"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["672a68c1-bf63-45c8-80c9-5c89232ab095"]}'
 ```
 {% elsif issue.state == "Review" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["993fad3d-d66e-4fcd-b2e7-d792c5607464"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["993fad3d-d66e-4fcd-b2e7-d792c5607464"]}'
 ```
 {% elsif issue.state == "Prepare" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["770bb05b-7864-4700-bc3f-0f5d713d8811"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["770bb05b-7864-4700-bc3f-0f5d713d8811"]}'
 ```
 {% elsif issue.state == "Test" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["875ae0fb-e6dd-4396-bb46-281bfa9f0478"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["875ae0fb-e6dd-4396-bb46-281bfa9f0478"]}'
 ```
 {% elsif issue.state == "Merge" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["8578b1d1-62fe-4613-aeb1-4ac1feeaf817"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["8578b1d1-62fe-4613-aeb1-4ac1feeaf817"]}'
 ```
 {% elsif issue.state == "Rebase" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["33e4e181-c22d-4978-b507-520ac4f8d7bd"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["33e4e181-c22d-4978-b507-520ac4f8d7bd"]}'
 ```
 {% elsif issue.state == "Closure" or issue.state == "Request Changes" %}
-```json
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {"label_ids": ["66abde8d-80d0-4057-83e2-e2a73a1a0e33"]})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"label_ids": ["66abde8d-80d0-4057-83e2-e2a73a1a0e33"]}'
 ```
 {% endif %}
 
@@ -299,31 +334,36 @@ If the PR is in a cluster:
 1. Determine the canonical PR (not draft, clean CI, mergeable, fresher, smaller, lowest PR number wins).
 2. **If this issue's PR IS the canonical PR:**
    - For each non-canonical cluster member, check if a Plane issue already exists:
-     ```
-     plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/?search=<PR_NUMBER>")
+     ```bash
+     curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+       "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/?search=<PR_NUMBER>"
      ```
    - If no issue exists, create one in Duplicate state:
-     ```
-     plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/", {
-       "name": "[#XXXX] <title>",
-       "description_html": "<p><strong>PR:</strong> <a href='https://github.com/openclaw/openclaw/pull/XXXX'>openclaw/openclaw#XXXX</a><br><strong>Author:</strong> @username (ASSOCIATION)</p><p><summary></p>",
-       "state": "f9715e64-cff7-49f5-9f72-db9ae83c08fa"
-     })
+     ```bash
+     curl -s -X POST \
+       -H "X-Api-Key: $PLANE_API_KEY" \
+       -H "Content-Type: application/json" \
+       "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/" \
+       -d '{"name": "[#XXXX] <title>", "description_html": "<p><strong>PR:</strong> <a href=\"https://github.com/openclaw/openclaw/pull/XXXX\">openclaw/openclaw#XXXX</a><br><strong>Author:</strong> @username (ASSOCIATION)</p><p><summary></p>", "state": "f9715e64-cff7-49f5-9f72-db9ae83c08fa"}'
      ```
    - Add a comment on the duplicate issue explaining the assessment:
-     ```
-     plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/<dup_id>/comments/", {
-       "comment_html": "<h2>Duplicate Assessment</h2><p>...</p>"
-     })
+     ```bash
+     curl -s -X POST \
+       -H "X-Api-Key: $PLANE_API_KEY" \
+       -H "Content-Type: application/json" \
+       "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/<dup_id>/comments/" \
+       -d '{"comment_html": "<h2>Duplicate Assessment</h2><p>...</p>"}'
      ```
 
 3. **If this issue's PR is NOT the canonical PR:**
    - Check if a Plane issue exists for the canonical PR. If not, create one in PR Triage state.
    - Add a comment explaining the duplicate assessment, then move this issue to Duplicate:
-     ```
-     plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-       "state": "f9715e64-cff7-49f5-9f72-db9ae83c08fa",
-     })
+     ```bash
+     curl -s -X PATCH \
+       -H "X-Api-Key: $PLANE_API_KEY" \
+       -H "Content-Type: application/json" \
+       "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+       -d '{"state": "f9715e64-cff7-49f5-9f72-db9ae83c08fa"}'
      ```
    - **Then stop** — do not proceed to the final metadata update.
 
@@ -337,31 +377,30 @@ gh pr checks <PR> --repo openclaw/openclaw
 **When finished**, do these steps IN THIS ORDER (comment first, update last):
 
 **Step 1: Post your full assessment as a comment:**
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<your full assessment as HTML>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<your full assessment as HTML>"}'
 ```
 
 **Step 2: Update issue metadata in a single call (this MUST be last — triggers state transition):**
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "name": "[#XXXX] <PR title>",
-  "description_html": "<p><strong>PR:</strong> <a href='...'>openclaw/openclaw#XXXX</a><br><strong>Author:</strong> @username (ASSOCIATION)</p><p><1-2 sentence summary></p>",
-  "state": "479bb9e1-5754-4a52-b0c7-a38be870659a",
-  "priority": "<urgent|high|medium|low>",
-  "estimate": <1|2|3|5|8>,
-  "label_ids": ["<recommendation label id>", "<subsystem label ids...>"],
-  "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"name": "[#XXXX] <PR title>", "description_html": "<p><strong>PR:</strong> <a href=\"...\">openclaw/openclaw#XXXX</a><br><strong>Author:</strong> @username (ASSOCIATION)</p><p><1-2 sentence summary></p>", "state": "479bb9e1-5754-4a52-b0c7-a38be870659a", "priority": "<urgent|high|medium|low>", "estimate": <1|2|3|5|8>, "label_ids": ["<recommendation label id>", "<subsystem label ids...>"], "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]}'
 ```
 
 {% elsif issue.state == "Review" %}
 ### Review Phase
 
 **Before starting work**, check this Plane issue for maintainer comments that may contain context, focus areas, or known issues:
-```
-plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/")
+```bash
+curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/"
 ```
 If any comments contain review guidance from the maintainer, factor them into your analysis.
 
@@ -372,26 +411,30 @@ Do NOT comment on the PR on GitHub. Do NOT push any changes. This is a read-only
 **When finished**, do these steps IN THIS ORDER (comment first, state transition last):
 
 **Step 1: Post a summary comment:**
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Review Summary</h2><p><recommendation from .local/review.json></p><ul><findings></ul>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Review Summary</h2><p><recommendation from .local/review.json></p><ul><findings></ul>"}'
 ```
 
 **Step 2: Transition to Review Complete (MUST be last):**
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "5c426d98-d3cf-468a-8900-d2328e3ed3f6",
-  "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "5c426d98-d3cf-468a-8900-d2328e3ed3f6", "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]}'
 ```
 
 {% elsif issue.state == "Prepare" %}
 ### Prepare Phase
 
 **Before starting work**, check this Plane issue for maintainer comments:
-```
-plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/")
+```bash
+curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/"
 ```
 Maintainer direction takes priority over review findings when they conflict.
 
@@ -402,18 +445,21 @@ The `.local/review.md` and `.local/review.json` from the review phase should alr
 **When finished**, do these steps IN THIS ORDER:
 
 **Step 1: Post a summary comment:**
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Prepare Summary</h2><p>What was fixed, gate results, push status (commit SHA, branch name)</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Prepare Summary</h2><p>What was fixed, gate results, push status (commit SHA, branch name)</p>"}'
 ```
 
 **Step 2: Transition to Prepare Complete (MUST be last):**
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "dc6aeca2-0b16-48b0-8b37-07f43ce45a56",
-  "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "dc6aeca2-0b16-48b0-8b37-07f43ce45a56", "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]}'
 ```
 
 {% elsif issue.state == "Test" %}
@@ -422,8 +468,9 @@ plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ is
 Run the full test suite against the prepared PR branch.
 
 **Before starting work**, check this Plane issue for maintainer comments:
-```
-plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/")
+```bash
+curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/"
 ```
 
 #### Step 1: Identify the PR and branch
@@ -458,18 +505,21 @@ fi
 **If tests PASS:**
 
 Step 1: Post summary comment:
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Test Results: PASS</h2><p>...</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Test Results: PASS</h2><p>...</p>"}'
 ```
 
 Step 2: Transition to Pre-merge (MUST be last):
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "9ba20885-72de-477f-b6ff-31f8411ab0de",
-  "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "9ba20885-72de-477f-b6ff-31f8411ab0de", "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]}'
 ```
 
 **If tests FAIL (PR-introduced):**
@@ -477,10 +527,12 @@ plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ is
 Step 1: Post detailed failure comment.
 
 Step 2: Move back to Prepare:
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "08d365d5-1a2d-41de-ac6f-2fe84336253d",
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "08d365d5-1a2d-41de-ac6f-2fe84336253d"}'
 ```
 
 {% elsif issue.state == "Merge" %}
@@ -491,37 +543,46 @@ Read the skill file at `.agents/skills/merge-pr/SKILL.md` and follow its instruc
 **If merge fails** (conflicts, mainline drift, CI failure, etc.):
 
 Step 1: Post a comment explaining the failure:
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Merge Failed</h2><p><error details></p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Merge Failed</h2><p><error details></p>"}'
 ```
 
 Step 2: Move back to Prepare:
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "08d365d5-1a2d-41de-ac6f-2fe84336253d",
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "08d365d5-1a2d-41de-ac6f-2fe84336253d"}'
 ```
 
 **When merge succeeds**, query relations before the final transition:
-```
-plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/?state=f9715e64-cff7-49f5-9f72-db9ae83c08fa")
+```bash
+curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/?state=f9715e64-cff7-49f5-9f72-db9ae83c08fa"
 ```
 (Check for Duplicate issues that may reference this issue's PR number; move them to Closure.)
 
 Step 1: Post summary comment (merge commit SHA, PR URL, duplicate disposition):
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Merged</h2><p>Commit: <sha>. PR: <url>.</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Merged</h2><p>Commit: <sha>. PR: <url>.</p>"}'
 ```
 
 Step 2: Transition to Done (MUST be last):
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "dbc1eaa1-2377-444c-9d84-1f86922d2755",
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "dbc1eaa1-2377-444c-9d84-1f86922d2755"}'
 ```
 
 {% elsif issue.state == "Rebase" %}
@@ -559,18 +620,21 @@ git push --force-with-lease
 **When finished**, do these steps IN THIS ORDER:
 
 Step 1: Post summary comment:
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<h2>Rebase Summary</h2><p>Clean/conflicted, new HEAD SHA, or abort report.</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<h2>Rebase Summary</h2><p>Clean/conflicted, new HEAD SHA, or abort report.</p>"}'
 ```
 
 Step 2: Transition to Todo (MUST be last):
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "479bb9e1-5754-4a52-b0c7-a38be870659a",
-  "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "479bb9e1-5754-4a52-b0c7-a38be870659a", "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"]}'
 ```
 
 {% elsif issue.state == "Closure" %}
@@ -582,8 +646,9 @@ Close a PR on GitHub. Reason may be: duplicate, superseded, stale, or not useful
 
 1. Extract the PR number from the issue title.
 2. Read all comments on this Plane issue:
-   ```
-   plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/")
+   ```bash
+   curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+     "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/"
    ```
 3. Check PR status:
    ```bash
@@ -604,17 +669,21 @@ Close a PR on GitHub. Reason may be: duplicate, superseded, stale, or not useful
 **When finished**:
 
 Step 1: Post confirmation comment:
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<p>Closed PR #XXXX. Reason: <reason>.</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<p>Closed PR #XXXX. Reason: <reason>.</p>"}'
 ```
 
 Step 2: Transition to Done (MUST be last):
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "dbc1eaa1-2377-444c-9d84-1f86922d2755",
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "dbc1eaa1-2377-444c-9d84-1f86922d2755"}'
 ```
 
 {% elsif issue.state == "Request Changes" %}
@@ -626,8 +695,9 @@ Post a GitHub code review requesting changes from the PR author based on review 
 
 1. Extract the PR number.
 2. Read all Plane issue comments:
-   ```
-   plane_rest("GET", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/")
+   ```bash
+   curl -s -H "X-Api-Key: $PLANE_API_KEY" \
+     "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/"
    ```
 3. Identify **author-required** findings (design problems, changes requiring splits, domain knowledge issues).
 
@@ -640,17 +710,21 @@ gh pr review <PR> --repo openclaw/openclaw --request-changes --body "<clear, act
 **When finished**:
 
 Step 1: Post confirmation comment:
-```
-plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-  "comment_html": "<p>Posted changes-requested review on GitHub. Summary: <what was requested>.</p>"
-})
+```bash
+curl -s -X POST \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+  -d '{"comment_html": "<p>Posted changes-requested review on GitHub. Summary: <what was requested>.</p>"}'
 ```
 
 Step 2: Move to Backlog (MUST be last):
-```
-plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
-  "state": "692e0def-0588-409f-87e9-e0ba99493c40",
-})
+```bash
+curl -s -X PATCH \
+  -H "X-Api-Key: $PLANE_API_KEY" \
+  -H "Content-Type: application/json" \
+  "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/" \
+  -d '{"state": "692e0def-0588-409f-87e9-e0ba99493c40"}'
 ```
 
 {% endif %}
@@ -662,8 +736,10 @@ plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ is
 {% endif %}
 - **Never delete the worktree** — it persists across pipeline stages
 - If you encounter an error you can't resolve, post a comment on the Plane issue explaining what went wrong:
-  ```
-  plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/", {
-    "comment_html": "<p>⚠️ Error: <description of what failed and why></p>"
-  })
+  ```bash
+  curl -s -X POST \
+    -H "X-Api-Key: $PLANE_API_KEY" \
+    -H "Content-Type: application/json" \
+    "https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/comments/" \
+    -d '{"comment_html": "<p>⚠️ Error: <description of what failed and why></p>"}'
   ```
