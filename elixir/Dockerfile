@@ -86,4 +86,4 @@ RUN git config --global user.name "Claw Kowalski" && \
 
 WORKDIR /home/app
 
-ENTRYPOINT ["/home/app/symphony", "WORKFLOW.plane.md"]
+ENTRYPOINT ["/home/app/symphony", "WORKFLOW.plane.md", "--i-understand-that-this-will-be-running-without-the-usual-guardrails"]
