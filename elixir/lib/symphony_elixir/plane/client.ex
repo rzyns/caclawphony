@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Plane.Client do
   @spec fetch_candidate_issues() :: {:ok, [Issue.t()]} | {:error, term()}
   def fetch_candidate_issues do
     states = Config.plane_states()
-    active_names = Config.linear_active_states()
+    active_names = Config.active_states()
 
     state_ids =
       active_names

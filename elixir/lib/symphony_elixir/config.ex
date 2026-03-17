@@ -297,6 +297,14 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
   end
 
+  @doc "Tracker-agnostic alias for active_states (use in non-Linear adapters)."
+  @spec active_states() :: [String.t()]
+  def active_states, do: linear_active_states()
+
+  @doc "Tracker-agnostic alias for terminal_states (use in non-Linear adapters)."
+  @spec terminal_states() :: [String.t()]
+  def terminal_states, do: linear_terminal_states()
+
   @spec plane_api_token() :: String.t() | nil
   def plane_api_token do
     validated_workflow_options()
