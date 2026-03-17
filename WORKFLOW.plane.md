@@ -16,7 +16,7 @@ workspace:
 
 hooks:
   after_create: |
-    SKILLS_SRC="/Users/phaedrus/Projects/maintainers/.agents/skills"
+    SKILLS_SRC="$MAINTAINERS_REPO/.agents/skills"
     SKILLS_DST=".agents/skills"
     if [ -d "$SKILLS_SRC" ]; then
       mkdir -p "$SKILLS_DST"
@@ -39,7 +39,7 @@ hooks:
       echo "Request Changes agent -- just needs gh CLI, no repo clone"
       exit 0
     fi
-    git clone /Users/phaedrus/Projects/openclaw . 2>/dev/null || true
+    git clone $OPENCLAW_REPO . 2>/dev/null || true
     PR_NUM=$(echo "$SYMPHONY_ISSUE_TITLE" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
     if [ -n "$PR_NUM" ]; then
       gh pr checkout "$PR_NUM" --force 2>/dev/null || git checkout main
@@ -289,7 +289,7 @@ Recommendation labels (always apply exactly one):
 
 **Step 1:** Refresh the local PR cache:
 ```bash
-/Users/phaedrus/Projects/maintainers/scripts/pr-plan --live --out /Users/phaedrus/Projects/maintainers/.local/pr-plan
+$MAINTAINERS_REPO/scripts/pr-plan --live --out $MAINTAINERS_REPO/.local/pr-plan
 ```
 
 **Step 2:** Run the pr-cluster skill for this specific PR:
@@ -323,7 +323,6 @@ If the PR is in a cluster:
      ```
      plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
        "state": "f9715e64-cff7-49f5-9f72-db9ae83c08fa",
-       "label_ids": []
      })
      ```
    - **Then stop** — do not proceed to the final metadata update.
@@ -384,7 +383,6 @@ plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ iss
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "5c426d98-d3cf-468a-8900-d2328e3ed3f6",
   "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-  "label_ids": []
 })
 ```
 
@@ -415,7 +413,6 @@ plane_rest("POST", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ iss
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "dc6aeca2-0b16-48b0-8b37-07f43ce45a56",
   "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-  "label_ids": []
 })
 ```
 
@@ -472,7 +469,6 @@ Step 2: Transition to Pre-merge (MUST be last):
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "9ba20885-72de-477f-b6ff-31f8411ab0de",
   "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-  "label_ids": []
 })
 ```
 
@@ -484,7 +480,6 @@ Step 2: Move back to Prepare:
 ```
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "08d365d5-1a2d-41de-ac6f-2fe84336253d",
-  "label_ids": []
 })
 ```
 
@@ -506,7 +501,6 @@ Step 2: Move back to Prepare:
 ```
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "08d365d5-1a2d-41de-ac6f-2fe84336253d",
-  "label_ids": []
 })
 ```
 
@@ -527,7 +521,6 @@ Step 2: Transition to Done (MUST be last):
 ```
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "dbc1eaa1-2377-444c-9d84-1f86922d2755",
-  "label_ids": []
 })
 ```
 
@@ -577,7 +570,6 @@ Step 2: Transition to Todo (MUST be last):
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "479bb9e1-5754-4a52-b0c7-a38be870659a",
   "assignee_ids": ["a528ab36-d423-4f64-be85-f7ddfeaebab1"],
-  "label_ids": []
 })
 ```
 
@@ -622,7 +614,6 @@ Step 2: Transition to Done (MUST be last):
 ```
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "dbc1eaa1-2377-444c-9d84-1f86922d2755",
-  "label_ids": []
 })
 ```
 
@@ -659,7 +650,6 @@ Step 2: Move to Backlog (MUST be last):
 ```
 plane_rest("PATCH", "/projects/7c7eb8f0-ec76-42e8-99d8-a212696395db/issues/{{ issue.id }}/", {
   "state": "692e0def-0588-409f-87e9-e0ba99493c40",
-  "label_ids": []
 })
 ```
 
