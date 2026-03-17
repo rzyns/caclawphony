@@ -12,7 +12,7 @@ polling:
   interval_ms: 30000
 
 workspace:
-  root: ~/Projects/caclawphony/workspaces
+  root: /home/app/workspaces
 
 hooks:
   after_create: |
