@@ -297,6 +297,66 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:tracker, :terminal_states])
   end
 
+  @doc "Tracker-agnostic alias for active_states (use in non-Linear adapters)."
+  @spec active_states() :: [String.t()]
+  def active_states, do: linear_active_states()
+
+  @doc "Tracker-agnostic alias for terminal_states (use in non-Linear adapters)."
+  @spec terminal_states() :: [String.t()]
+  def terminal_states, do: linear_terminal_states()
+
+  @spec plane_api_token() :: String.t() | nil
+  def plane_api_token do
+    validated_workflow_options()
+    |> get_in([:tracker, :api_key])
+    |> resolve_env_value(System.get_env("PLANE_API_KEY"))
+    |> normalize_secret_value()
+  end
+
+  @spec plane_workspace_slug() :: String.t() | nil
+  def plane_workspace_slug do
+    fetch_value([["tracker", "plane_workspace_slug"]], nil)
+    |> case do
+      nil -> nil
+      :missing -> nil
+      val -> normalize_secret_value(val)
+    end
+  end
+
+  @spec plane_project_id() :: String.t() | nil
+  def plane_project_id do
+    get_in(validated_workflow_options(), [:tracker, :project_slug])
+  end
+
+  @spec plane_project_identifier() :: String.t() | nil
+  def plane_project_identifier do
+    fetch_value([["tracker", "project_identifier"]], nil)
+    |> case do
+      nil -> nil
+      :missing -> nil
+      val -> normalize_secret_value(val)
+    end
+  end
+
+  @spec plane_base_url() :: String.t()
+  def plane_base_url do
+    endpoint = get_in(validated_workflow_options(), [:tracker, :endpoint])
+
+    if is_binary(endpoint) and endpoint != "" do
+      # Ensure trailing slash for URL construction
+      if String.ends_with?(endpoint, "/"), do: endpoint, else: endpoint <> "/"
+    else
+      slug = plane_workspace_slug()
+      "https://app.plane.so/api/v1/workspaces/#{slug}/"
+    end
+  end
+
+  @spec plane_states() :: %{String.t() => String.t()}
+  def plane_states, do: states()
+
+  @spec plane_labels() :: %{String.t() => term()}
+  def plane_labels, do: labels()
+
   @spec poll_interval_ms() :: pos_integer()
   def poll_interval_ms do
     get_in(validated_workflow_options(), [:polling, :interval_ms])
@@ -573,6 +633,7 @@ defmodule SymphonyElixir.Config do
     case tracker_kind() do
       "linear" -> :ok
       "memory" -> :ok
+      "plane" -> :ok
       nil -> {:error, :missing_tracker_kind}
       other -> {:error, {:unsupported_tracker_kind, other}}
     end
