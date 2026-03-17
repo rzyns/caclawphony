@@ -332,12 +332,14 @@ defmodule SymphonyElixir.Config do
 
   @spec plane_base_url() :: String.t()
   def plane_base_url do
-    slug = plane_workspace_slug()
+    endpoint = get_in(validated_workflow_options(), [:tracker, :endpoint])
 
-    if is_binary(slug) and slug != "" do
-      "https://plane.svc.dziurzynscy.com/api/v1/workspaces/#{slug}/"
+    if is_binary(endpoint) and endpoint != "" do
+      # Ensure trailing slash for URL construction
+      if String.ends_with?(endpoint, "/"), do: endpoint, else: endpoint <> "/"
     else
-      "https://plane.svc.dziurzynscy.com/api/v1/workspaces/"
+      slug = plane_workspace_slug()
+      "https://app.plane.so/api/v1/workspaces/#{slug}/"
     end
   end
 

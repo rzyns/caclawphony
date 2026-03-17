@@ -106,15 +106,15 @@ defmodule SymphonyElixir.Plane.Client do
   # Internal – fetching
   # ---------------------------------------------------------------------------
 
-  defp fetch_by_state_ids(state_ids, fetch_relations) do
+  defp fetch_by_state_ids(state_ids, _fetch_relations) do
     project_id = Config.plane_project_id()
 
     state_query = Enum.map_join(state_ids, "&", fn id -> "state=#{id}" end)
 
-    do_paginate(project_id, state_query, 0, [], fetch_relations)
+    do_paginate(project_id, state_query, 0, [])
   end
 
-  defp do_paginate(project_id, state_query, offset, acc, fetch_relations) do
+  defp do_paginate(project_id, state_query, offset, acc) do
     url = "#{Config.plane_base_url()}projects/#{project_id}/issues/?#{state_query}&per_page=#{@page_size}&offset=#{offset}"
 
     case plane_request(:get, url) do
@@ -123,13 +123,13 @@ defmodule SymphonyElixir.Plane.Client do
 
         normalized =
           results
-          |> Enum.map(&normalize_issue(&1, project_id, fetch_relations))
+          |> Enum.map(&normalize_issue(&1, project_id, nil))
           |> Enum.reject(&is_nil/1)
 
         updated_acc = normalized ++ acc
 
         if has_more do
-          do_paginate(project_id, state_query, offset + @page_size, updated_acc, fetch_relations)
+          do_paginate(project_id, state_query, offset + @page_size, updated_acc)
         else
           {:ok, Enum.reverse(updated_acc)}
         end
@@ -144,13 +144,13 @@ defmodule SymphonyElixir.Plane.Client do
     end
   end
 
-  defp get_issue(issue_id, fetch_relations) do
+  defp get_issue(issue_id, _fetch_relations) do
     project_id = Config.plane_project_id()
     url = "#{Config.plane_base_url()}projects/#{project_id}/issues/#{issue_id}/"
 
     case plane_request(:get, url) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
-        issue = normalize_issue(body, project_id, fetch_relations)
+        issue = normalize_issue(body, project_id, nil)
 
         if is_nil(issue) do
           {:error, :normalization_failed}
@@ -179,7 +179,7 @@ defmodule SymphonyElixir.Plane.Client do
   # Internal – normalisation
   # ---------------------------------------------------------------------------
 
-  defp normalize_issue(raw, project_id, fetch_relations) when is_map(raw) do
+  defp normalize_issue(raw, _project_id, _fetch_relations) when is_map(raw) do
     states = Config.plane_states()
     labels = Config.plane_labels()
     project_identifier = Config.plane_project_identifier()
@@ -187,12 +187,8 @@ defmodule SymphonyElixir.Plane.Client do
     states_by_id = Map.new(states, fn {name, uuid} -> {uuid, name} end)
     labels_by_id = build_labels_by_id(labels)
 
-    blocked_by =
-      if fetch_relations do
-        fetch_blocked_by(raw["id"], project_id, states_by_id, project_identifier)
-      else
-        []
-      end
+    # Plane CE does not expose issue-relations via REST; blocked_by unsupported
+    blocked_by = []
 
     %Issue{
       id: raw["id"],
@@ -201,7 +197,7 @@ defmodule SymphonyElixir.Plane.Client do
       description: raw["description_html"],
       priority: parse_priority(raw["priority"]),
       state: Map.get(states_by_id, raw["state"]),
-      labels: resolve_label_ids(raw["label_ids"], labels_by_id),
+      labels: resolve_label_ids(raw["label_ids"] || raw["labels"], labels_by_id),
       assignee_id: nil,
       branch_name: nil,
       url: nil,
@@ -214,61 +210,15 @@ defmodule SymphonyElixir.Plane.Client do
 
   defp normalize_issue(_raw, _project_id, _fetch_relations), do: nil
 
-  defp fetch_blocked_by(nil, _project_id, _states_by_id, _project_identifier), do: []
-
-  defp fetch_blocked_by(issue_id, project_id, states_by_id, project_identifier) do
-    url = "#{Config.plane_base_url()}projects/#{project_id}/issues/#{issue_id}/issue-relations/"
-
-    case plane_request(:get, url) do
-      {:ok, %{status: 200, body: body}} ->
-        extract_blocked_by(body, states_by_id, project_identifier)
-
-      _ ->
-        []
-    end
-  end
-
-  defp extract_blocked_by(body, states_by_id, project_identifier) when is_map(body) do
-    # Plane may return {"blocked_by": [...]} or a flat list
-    items = Map.get(body, "blocked_by", Map.get(body, "results", []))
-    extract_blocked_by(items, states_by_id, project_identifier)
-  end
-
-  defp extract_blocked_by(body, states_by_id, project_identifier) when is_list(body) do
-    Enum.flat_map(body, fn relation ->
-      relation_type = Map.get(relation, "relation_type") || Map.get(relation, "type")
-
-      if relation_type == "blocked_by" do
-        detail = Map.get(relation, "issue_detail") || relation
-
-        id = Map.get(detail, "id")
-        seq_id = Map.get(detail, "sequence_id")
-        state_uuid = Map.get(detail, "state")
-
-        [
-          %{
-            id: id,
-            identifier: build_identifier(project_identifier, seq_id),
-            state: Map.get(states_by_id, state_uuid)
-          }
-        ]
-      else
-        []
-      end
-    end)
-  end
-
-  defp extract_blocked_by(_body, _states_by_id, _project_identifier), do: []
-
   defp build_identifier(nil, seq_id) when not is_nil(seq_id), do: to_string(seq_id)
   defp build_identifier(prefix, seq_id) when is_binary(prefix) and not is_nil(seq_id), do: "#{prefix}-#{seq_id}"
   defp build_identifier(_prefix, _seq_id), do: nil
 
-  defp parse_priority(0), do: nil
-  defp parse_priority(1), do: 1
-  defp parse_priority(2), do: 2
-  defp parse_priority(3), do: 3
-  defp parse_priority(4), do: 4
+  defp parse_priority("none"), do: nil
+  defp parse_priority("urgent"), do: 1
+  defp parse_priority("high"), do: 2
+  defp parse_priority("medium"), do: 3
+  defp parse_priority("low"), do: 4
   defp parse_priority(_), do: nil
 
   defp build_labels_by_id(labels) when is_map(labels) do

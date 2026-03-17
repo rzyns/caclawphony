@@ -3,7 +3,8 @@ tracker:
   kind: plane
   api_key: $PLANE_API_KEY
   project_slug: 7c7eb8f0-ec76-42e8-99d8-a212696395db   # openclaw project UUID
-  plane_workspace_slug: warsztat
+  endpoint: https://plane.svc.dziurzynscy.com/api/v1/workspaces/warsztat   # self-hosted base URL; omit for Plane.so cloud (uses plane_workspace_slug fallback)
+  plane_workspace_slug: warsztat   # only needed if endpoint is not set (Plane.so cloud fallback)
   project_identifier: OC
   active_states: todo, pr_triage, review, review_complete, prepare, prepare_complete, test, pre_merge, merge, rebase, request_changes, closure
   terminal_states: done, cancelled, duplicate
