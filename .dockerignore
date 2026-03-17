@@ -1,0 +1,9 @@
+elixir/_build/
+elixir/deps/
+elixir/log/
+elixir/.elixir_ls/
+elixir/.dialyzer/
+.git/
+.github/
+*.md
+!WORKFLOW.plane.md

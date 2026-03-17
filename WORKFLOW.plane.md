@@ -11,6 +11,10 @@ tracker:
 polling:
   interval_ms: 30000
 
+server:
+  port: 4000
+  host: 0.0.0.0
+
 workspace:
   root: /home/app/workspaces
 
