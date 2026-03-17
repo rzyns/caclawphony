@@ -27,20 +27,15 @@ RUN mix escript.build
 
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-# Minimal Debian + Erlang runtime + Node.js (for claude + claude-app-server)
-FROM debian:bookworm-slim AS runtime
+# Use the same OTP 28 image as the builder so the escript runtime version matches.
+# (Debian apt erlang-base is OTP 25/26, which produces "corrupt atom table" errors.)
+FROM hexpm/elixir:1.19.5-erlang-28.2-debian-bookworm-20260316-slim AS runtime
 
 WORKDIR /home/app
 
-# System deps: erlang runtime, git, curl, bash, ssh, jq
+# Additional system deps: git, curl, bash, ssh, jq (erlang already present)
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
-        erlang-base \
-        erlang-crypto \
-        erlang-inets \
-        erlang-ssl \
-        erlang-asn1 \
-        erlang-public-key \
         git \
         curl \
         ca-certificates \
